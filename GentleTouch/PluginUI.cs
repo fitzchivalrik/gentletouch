@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using Dalamud.Plugin;
+using GentleTouch.Caraxi;
 using ImGuiNET;
 
 namespace GentleTouch
@@ -60,6 +62,9 @@ namespace GentleTouch
 
             
             ImGui.Text($"InputStruct {new IntPtr(this.gentle.inputst).ToString("x8")}");
+            ImGui.Text($"ActionManager {this.gentle.actionManagerAddress.ToString("x8")}");
+            
+            
             if (this.gentle.inputst != null)
             {
                 var brbrPtr = new IntPtr(this.gentle.inputst);
@@ -74,14 +79,53 @@ namespace GentleTouch
                 var cur_Pad_xInput_Index = *(uint*) (cur_Pad_Ptr + 40);
                 ImGui.Text($"{nameof(cur_Pad_xInput_Index)} as uint: {cur_Pad_xInput_Index}");
             }
-
+            
+            ImGui.Text($"Marshal Calculations");
+            if (this.gentle.inputst != null)
+            {
+                var brbrPtr = new IntPtr(this.gentle.inputst);
+                var active_Pad_Number = Marshal.ReadInt32(brbrPtr, 876);
+                ImGui.Text($"{nameof(active_Pad_Number)}: {active_Pad_Number}");
+                var pad_array_ptr = Marshal.ReadIntPtr(brbrPtr, 96);
+                ImGui.Text($"{nameof(pad_array_ptr)}: {pad_array_ptr.ToInt64()}, as Pointer {pad_array_ptr.ToString("x8")}");
+                var cur_Pad_Ptr = pad_array_ptr + 1912 * active_Pad_Number;
+                ImGui.Text($"{nameof(cur_Pad_Ptr)}: {cur_Pad_Ptr.ToString("x8")}");
+                var xInputCheck = Marshal.ReadByte(cur_Pad_Ptr, 1);
+                ImGui.Text($"{nameof(xInputCheck)} as byte: {xInputCheck}");
+                var cur_Pad_xInput_Index = Marshal.ReadInt16(cur_Pad_Ptr, 40);
+                var cur_Pad_xInput_Index_byte = Marshal.ReadByte(cur_Pad_Ptr, 40);
+                ImGui.Text($"{nameof(cur_Pad_xInput_Index)} as short: {cur_Pad_xInput_Index}");
+                ImGui.Text($"{nameof(cur_Pad_xInput_Index_byte)} as byte: {cur_Pad_xInput_Index_byte}");
+            }
+            
             ImGui.Text($"Ctor RETURN  {new IntPtr(this.gentle.inputstCtor).ToString("x8")}");
             ImGui.Text($"Ctor *RETURN {new IntPtr(this.gentle.inputStCtorDe).ToString("x8")}");
+            ImGui.Text($"Cooldown LastActionID {this.gentle.LastActionId}");
+            ImGui.Text($"Action {this.gentle.aCooldownAction?.Name.ToString() ?? ""}");
+            ImGui.Text($"Action Raw {this.gentle.aCooldownAction?.Name.RawString ?? ""}");
+            ImGui.Text($"Action (Row) Id {this.gentle.aCooldownAction?.RowId}");
+            ImGui.Text($"Action Cooldowngroup {this.gentle.aCooldownAction?.CooldownGroup}");
+            if (this.gentle.aCooldownAction?.AttackType.IsValueCreated ?? false)
+            {
+                ImGui.Text($"ActionType (Row) Id {this.gentle.aCooldownAction.AttackType.Value.RowId}");
+            }
+            
+            var cooldown = new Cooldown {CooldownElapsed = -1, CooldownTotal = -1, IsCooldown = 0, ActionID = 9999};
+            var cool = Common.ActionManager.GetActionCooldownSlot(this.gentle.aCooldownAction?.CooldownGroup ?? 0);
+            if (cool != null)
+            {
+                cooldown = *cool;
+            }
+            ImGui.Text($"Cooldown Elapsed: {cooldown.CooldownElapsed}");
+            ImGui.Text($"Cooldown Total: {cooldown.CooldownTotal}");
+            ImGui.Text($"IsCooldown: {cooldown.IsCooldown}");
+            ImGui.Text($"ActionID: {cooldown.ActionID}");
             ImGui.Separator();
+            
+            
             ImGui.InputInt("RightMotorSpeed", ref rightMotorSpeed);
             ImGui.InputInt("LeftMotorSpeed", ref leftMotorSpeed);
             ImGui.Separator();
-            
             
             
             var a = false;
