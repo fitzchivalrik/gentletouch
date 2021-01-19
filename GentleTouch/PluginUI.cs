@@ -12,11 +12,11 @@ namespace GentleTouch
     {
         public bool IsVisible = true;
         private Configuration config;
-        private GentleTouchPlugin gentle;
+        private GentleTouchExploration gentle;
         private int leftMotorSpeed = 0;
         private int rightMotorSpeed = 0;
 
-        public PluginUI(Configuration config, GentleTouchPlugin gentle)
+        public PluginUI(Configuration config, GentleTouchExploration gentle)
         {
             this.config = config;
             this.gentle = gentle;
@@ -59,7 +59,10 @@ namespace GentleTouch
                 this.gentle.brbr(0, 0);
             }
             ImGui.PopStyleColor(3);
-
+            if(ImGui.Button("Reset Counter"))
+            {
+                gentle.counter = 0;
+            }
             
             ImGui.Text($"InputStruct {new IntPtr(this.gentle.inputst).ToString("x8")}");
             ImGui.Text($"ActionManager {this.gentle.actionManagerAddress.ToString("x8")}");
@@ -98,8 +101,6 @@ namespace GentleTouch
                 ImGui.Text($"{nameof(cur_Pad_xInput_Index_byte)} as byte: {cur_Pad_xInput_Index_byte}");
             }
             
-            ImGui.Text($"Ctor RETURN  {new IntPtr(this.gentle.inputstCtor).ToString("x8")}");
-            ImGui.Text($"Ctor *RETURN {new IntPtr(this.gentle.inputStCtorDe).ToString("x8")}");
             ImGui.Text($"Cooldown LastActionID {this.gentle.LastActionId}");
             ImGui.Text($"Action {this.gentle.aCooldownAction?.Name.ToString() ?? ""}");
             ImGui.Text($"Action Raw {this.gentle.aCooldownAction?.Name.RawString ?? ""}");
@@ -110,7 +111,8 @@ namespace GentleTouch
                 ImGui.Text($"ActionType (Row) Id {this.gentle.aCooldownAction.AttackType.Value.RowId}");
             }
             
-            var cooldown = new Cooldown {CooldownElapsed = -1, CooldownTotal = -1, IsCooldown = 0, ActionID = 9999};
+            ImGui.Text($"Cooldown Counter: {gentle.counter}");
+            var cooldown = new Cooldown(0, 9999,-1,-1);
             var cool = Common.ActionManager.GetActionCooldownSlot(this.gentle.aCooldownAction?.CooldownGroup ?? 0);
             if (cool != null)
             {
@@ -135,6 +137,7 @@ namespace GentleTouch
             ImGui.Checkbox("###notARealCheckbox", ref a);
             ImGui.PopStyleColor(3);
             ImGui.SameLine();
+            /*
             if (ImGui.TreeNode("General Options")) {
                 if (ImGui.Checkbox("Show Experimental Tweaks.", ref this.config.ShowExperimentalTweaks))
                 {
@@ -148,7 +151,7 @@ namespace GentleTouch
                 };
                 ImGui.TreePop();
             }
-
+            */
             ImGui.End();
             
         }

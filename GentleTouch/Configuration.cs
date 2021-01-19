@@ -1,6 +1,9 @@
-﻿using Dalamud.Configuration;
+﻿using System;
+using System.Numerics;
+using Dalamud.Configuration;
 using Dalamud.Game.ClientState;
 using Dalamud.Plugin;
+using ImGuiNET;
 using Newtonsoft.Json;
 
 namespace GentleTouch
@@ -9,20 +12,12 @@ namespace GentleTouch
     {
         public int Version { get; set; }
 
-        // Add any other properties or methods here.
-        [JsonIgnore] private DalamudPluginInterface pluginInterface;
-        
-        public bool HideKofi;
-        public bool ShowExperimentalTweaks;
+        public bool ShouldVibrateDuringPvP;
 
-        public void Initialize(DalamudPluginInterface pluginInterface)
-        {
-            this.pluginInterface = pluginInterface;
-        }
+        public bool ShouldVibrateWithSheathedWeapon;
 
-        public void Save()
-        {
-            this.pluginInterface.SavePluginConfig(this);
-        }
+        public bool ShouldVibrateDuringCasting;
+
+
     }
 }

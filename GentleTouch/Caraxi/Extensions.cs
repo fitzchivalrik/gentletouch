@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using Dalamud.Game.ClientState.Actors.Types;
 using Lumina.Excel.GeneratedSheets;
 
@@ -18,8 +19,10 @@ namespace GentleTouch.Caraxi {
     }
     public static class Extensions {
 
-        public static unsafe bool IsStatus(this Actor actor, StatusFlags flags) {
-            var f = *(byte*) (actor.Address + 0x1980);
+        public static bool IsStatus(this Actor actor, StatusFlags flags)
+        {
+            var f = Marshal.ReadByte(actor.Address, 0x1980);
+            //var f = *(byte*) (actor.Address + 0x1980);
             return (f & (byte)flags) > 0;
         }
 

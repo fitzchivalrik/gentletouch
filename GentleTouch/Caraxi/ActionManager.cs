@@ -43,12 +43,5 @@ namespace GentleTouch.Caraxi
     public unsafe struct ActionManagerStruct {
         [FieldOffset(0x00)] public void* @base;
     }
-
-    [StructLayout(LayoutKind.Explicit, Size = 0x14)]
-    public unsafe struct Cooldown {
-        [FieldOffset(0x0)] public byte IsCooldown;
-        [FieldOffset(0x4)] public uint ActionID;
-        [FieldOffset(0x8)] public float CooldownElapsed;
-        [FieldOffset(0xC)] public float CooldownTotal;
-    }
+    
 }
