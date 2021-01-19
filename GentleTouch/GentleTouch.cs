@@ -1,6 +1,11 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using Dalamud.Configuration;
 using Dalamud.Plugin;
 using Dalamud.Game.Command;
@@ -35,6 +40,10 @@ namespace GentleTouch
         private readonly Configuration _config;
 
         // TODO TESTING
+        private readonly CancellationTokenSource _tokenSource;
+        private readonly CancellationToken _token;
+        private readonly List<Task> _tasks;
+        
         private int _rightMotorSpeed = 0;
         private int _leftMotorSpeed = 0;
         private int _cooldownGroup = 58;
@@ -42,6 +51,16 @@ namespace GentleTouch
         private long _nextTimeStep = 0;
 
         private bool reset = false;
+        private IEnumerator<VibrationPattern.Step?> _currentIterator;
+        private VibrationPattern _pattern = new()
+        {
+            Steps = new[]
+            {
+                new VibrationPattern.Step(50, 50, 200),
+                new VibrationPattern.Step(0, 0, 200),
+            },
+            Cycles = int.MaxValue
+        };
         //TODO END TESTING
 
 
@@ -55,7 +74,6 @@ namespace GentleTouch
             ;
 
         private bool _isDisposed;
-        
 
 
         public GentleTouch(DalamudPluginInterface pi, Configuration c)
@@ -86,7 +104,7 @@ namespace GentleTouch
             _config = c;
             _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
             _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
-            _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
+            //_pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
 
             #region Hooks, Functions and Addresses
 
@@ -110,7 +128,10 @@ namespace GentleTouch
                 HelpMessage = "Become gentle.",
                 ShowInHelp = true
             });
-
+            _tokenSource = new ();
+            _token = _tokenSource.Token;
+            _tasks = new ();
+            _tasks.Add(Task.Run(OutOfCombatUpdate, _token));
             //TODO END TESTING
         }
 
@@ -124,31 +145,33 @@ namespace GentleTouch
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
                 return;
             }
-            var pattern = new[]
-            {
-                new VibrationStepStruct(50, 50,50),
-                new VibrationStepStruct(0, 0,50),
-            };
 
-            var sfs = new VibrationPattern.Step(
-                50,
-                70,
-                100);
-            
 
             var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup-1);
-            if (cooldown)
+            if (!cooldown)
             {
-                if (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() > _nextTimeStep)
+                if (_currentIterator.MoveNext())
                 {
-                    var p = pattern[_nextStep++ % pattern.Length];
-                    _nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + p.MillisecondsTillNextStep;
-                    PluginLog.Log($"Pattern for {_cooldownGroup}: {p}");
-                    _ffxivSetState(_maybeControllerStruct, p.RightMotorPercentage, p.LeftMotorPercentage);
+                    var s = _currentIterator.Current;
+                    if (s is not null)
+                    {
+                        PluginLog.Log($"Pattern for {_cooldownGroup}: {s}");
+                        _ffxivSetState(_maybeControllerStruct, s.RightMotorPercentage, s.LeftMotorPercentage);                        
+                    }
+                    else
+                    {
+                        PluginLog.Log("Current step was NULL");
+                    }
+                }
+                else
+                {
+                    PluginLog.Warning("Ressetting pattern");
+                    _currentIterator = _pattern.GetEnumerator();
                 }
             }
             else
             {
+                _currentIterator = _pattern.GetEnumerator();
                 _ffxivSetState(_maybeControllerStruct, 0, 0);
             }
         }
@@ -158,10 +181,91 @@ namespace GentleTouch
             // TODO !
             var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
             if (!inCombat) return;
+            _currentIterator = _pattern.GetEnumerator();
             _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
 
 
+        }
+
+        private async Task OutOfCombatUpdate()
+        {
+            CleanTasks();
+            while (true)
+            {
+                PluginLog.Warning("During Out of Combat Loop");
+                if (_token.IsCancellationRequested)
+                {
+                    _token.ThrowIfCancellationRequested();
+                }
+                var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
+                if (!inCombat)
+                {
+                    PluginLog.Warning("NOT in Combat");
+                    await Task.Delay(50, _token);
+                    continue;
+                }
+                PluginLog.Warning("Starting In Combat Loop");
+                _tasks.Add(Task.Run(InCombatUpdate, _token));
+                break;
+            }
+        }
+        private async Task InCombatUpdate()
+        {
+            PluginLog.Warning("In Combat Loop");
+            CleanTasks();
+            Task pattern;
+            var cancellationSource = new CancellationTokenSource();
+            var patternToken = cancellationSource.Token;
+            var enumerator = _pattern.GetAsyncEnumerator(patternToken);
+            while (true)
+            {
+                PluginLog.Warning("During Combat Loop");
+                if (_token.IsCancellationRequested)
+                {
+                    _token.ThrowIfCancellationRequested();
+                }
+                var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
+                if (!inCombat)
+                {
+                    PluginLog.Warning("Starting Out of Combat Loop");
+                    _ffxivSetState(_maybeControllerStruct, 0, 0);
+                    _tasks.Add(Task.Run(OutOfCombatUpdate, _token));
+                    break;
+                }
+                var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup-1);
+                PluginLog.Warning("Checking Cooldown");
+                if (!cooldown)
+                {
+                    PluginLog.Warning("Pattern execution");
+                    if (await enumerator.MoveNextAsync())
+                    {
+                        var s = enumerator.Current;
+                        PluginLog.Log($"Pattern for {_cooldownGroup}: {s}");
+                        _ffxivSetState(_maybeControllerStruct, s.RightMotorPercentage, s.LeftMotorPercentage);
+                    }
+                }
+                else
+                {
+                    PluginLog.Warning("On Cooldown");
+                    cancellationSource.Cancel();
+                    cancellationSource = new CancellationTokenSource();
+                    patternToken = cancellationSource.Token;
+                    enumerator = _pattern.GetAsyncEnumerator(patternToken);
+                    _ffxivSetState(_maybeControllerStruct, 0, 0);
+                }
+                await Task.Delay(10, _token);
+            }
+
+        }
+
+        private void CleanTasks()
+        {
+            foreach (var task in _tasks.Where(t => t.IsCanceled || t.IsCompleted))
+            {
+                task.Dispose();
+            }
+            _tasks.RemoveAll(t => t.IsCanceled || t.IsCompleted);
         }
 
         private int ControllerPollDetour(nint maybeControllerStruct)
@@ -253,6 +357,13 @@ namespace GentleTouch
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
                 _pluginInterface.CommandManager.RemoveHandler(Command);
+                // TODO TESTING
+                
+                _tokenSource.Cancel();
+                while(!_tasks.TrueForAll(t => t.IsCanceled || t.IsCompleted )) {}
+                _tasks.ForEach(t => t.Dispose());
+                _tokenSource.Dispose();
+                // TODO TESTING END
             }
 
             if (_controllerPoll.IsEnabled) _controllerPoll.Disable();

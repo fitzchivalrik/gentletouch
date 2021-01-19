@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GentleTouch
@@ -14,20 +15,38 @@ namespace GentleTouch
             ushort MillisecondsTillNextStep = 100
             );
 
-        private IEnumerable<Step> Steps { get; init; }
+        internal IEnumerable<Step> Steps { get; init; }
+        internal int Cycles { get; init; } = 1;
 
         internal IEnumerator<Step?> GetEnumerator()
         {
             var nextTimeStep = 0L;
-            foreach (var s in Steps)
+
+            for (var i = 0; i < Cycles; i++)
             {
-                if (s is null) yield break;
+                foreach (var s in Steps)
+                {
+                    while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
+                        yield return null;
+                    yield return s;
+                    nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + s.MillisecondsTillNextStep;
+                }
                 while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
                     yield return null;
-                yield return s;
-                nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + s.MillisecondsTillNextStep;
             }
         }
+
+        internal async IAsyncEnumerator<Step> GetAsyncEnumerator(CancellationToken token)
+        {
+            for (var i = 0; i < Cycles; i++)
+            {
+                foreach (var s in Steps)
+                {
+                    yield return s;
+                    await Task.Delay(s.MillisecondsTillNextStep, token);
+                }
+            }
+        } 
     }
     
     

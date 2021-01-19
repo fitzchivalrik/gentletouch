@@ -60,7 +60,7 @@ namespace GentleTouch
 
         public static implicit operator bool(Cooldown a)
         {
-            return a.IsCooldown == 0;
+            return a.IsCooldown == 1;
         }
     }
 }
