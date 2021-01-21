@@ -17,7 +17,6 @@ namespace GentleTouch
         private DalamudPluginInterface _pluginInterface = null!;
         private PluginCommandManager<GentleTouchExploration> _commandManager = null!;
         private Configuration _config = null!;
-        private PluginUI _ui = null!;
 
         public string Name => "GentleTouch";
 
@@ -130,8 +129,6 @@ namespace GentleTouch
 
             pi.Framework.OnUpdateEvent += this.FrameworkOnUpdate;
 
-            this._ui = new PluginUI(this._config, this);
-            this._pluginInterface.UiBuilder.OnBuildUi += this._ui.Draw;
 
 
             this._commandManager = new PluginCommandManager<GentleTouchExploration>(this, this._pluginInterface);
@@ -293,7 +290,7 @@ namespace GentleTouch
         // ReSharper disable once UnusedMember.Global
         public void ExampleCommand1(string command, string args)
         {
-            this._ui.IsVisible = true;
+            //this._ui.IsVisible = true;
         }
 
         #region IDisposable Support
@@ -316,7 +313,7 @@ namespace GentleTouch
 
             this._pluginInterface.SavePluginConfig(this._config);
 
-            this._pluginInterface.UiBuilder.OnBuildUi -= this._ui.Draw;
+            
             this._pluginInterface.Framework.OnUpdateEvent -= this.FrameworkOnUpdate;
 
             this._pluginInterface.Dispose();

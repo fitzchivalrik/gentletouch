@@ -37,18 +37,17 @@ namespace GentleTouch
         private readonly nint _actionManager;
         private readonly GetActionCooldownSlot _getActionCooldownSlot;
         private readonly DalamudPluginInterface _pluginInterface;
-        private readonly Configuration _config;
+        private Configuration _config;
 
         // TODO TESTING
-        private readonly CancellationTokenSource _tokenSource;
-        private readonly CancellationToken _token;
-        private readonly List<Task> _tasks;
-        
+
         private int _rightMotorSpeed = 0;
         private int _leftMotorSpeed = 0;
         private int _cooldownGroup = 58;
         private int _nextStep = 0;
         private long _nextTimeStep = 0;
+        private int[] _lastReturnedFromPoll = new int[100];
+        private int _currentIndex = 0;
 
         private bool reset = false;
         private IEnumerator<VibrationPattern.Step?> _currentIterator;
@@ -59,7 +58,9 @@ namespace GentleTouch
                 new VibrationPattern.Step(50, 50, 200),
                 new VibrationPattern.Step(0, 0, 200),
             },
-            Cycles = int.MaxValue
+            //Cycles = int.MaxValue,
+            Infinite = true,
+            Name = "SimplePattern"
         };
         //TODO END TESTING
 
@@ -67,7 +68,7 @@ namespace GentleTouch
         private nint _maybeControllerStruct;
         private bool _shouldDrawConfigUi =
 #if DEBUG
-                false
+                true
 #else
             false
 #endif
@@ -76,7 +77,7 @@ namespace GentleTouch
         private bool _isDisposed;
 
 
-        public GentleTouch(DalamudPluginInterface pi, Configuration c)
+        public GentleTouch(DalamudPluginInterface pi, Configuration config)
         {
             #region Signatures
             const string maybeControllerPollSignature =
@@ -100,11 +101,21 @@ namespace GentleTouch
             const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
             #endregion
             
+            // TODO TESTING
+            //config.Patterns.RemoveAll(p => true);
+            if (config.Patterns.Count == 0)
+            {
+             
+                config.Patterns.Add(_pattern);
+                pi.SavePluginConfig(config);
+            }
+            // TODO END TESTING
+            
             _pluginInterface = pi;
-            _config = c;
+            _config = config;
             _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
             _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
-            //_pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
+            _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
 
             #region Hooks, Functions and Addresses
 
@@ -128,10 +139,6 @@ namespace GentleTouch
                 HelpMessage = "Become gentle.",
                 ShowInHelp = true
             });
-            _tokenSource = new ();
-            _token = _tokenSource.Token;
-            _tasks = new ();
-            _tasks.Add(Task.Run(OutOfCombatUpdate, _token));
             //TODO END TESTING
         }
 
@@ -166,12 +173,12 @@ namespace GentleTouch
                 else
                 {
                     PluginLog.Warning("Ressetting pattern");
-                    _currentIterator = _pattern.GetEnumerator();
+                    _currentIterator = _config.Patterns[0].GetEnumerator();
                 }
             }
             else
             {
-                _currentIterator = _pattern.GetEnumerator();
+                _currentIterator = _config.Patterns[0].GetEnumerator();
                 _ffxivSetState(_maybeControllerStruct, 0, 0);
             }
         }
@@ -181,108 +188,60 @@ namespace GentleTouch
             // TODO !
             var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
             if (!inCombat) return;
-            _currentIterator = _pattern.GetEnumerator();
+            _currentIterator = _config.Patterns[0].GetEnumerator();
             _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
 
 
         }
 
-        private async Task OutOfCombatUpdate()
-        {
-            CleanTasks();
-            while (true)
-            {
-                PluginLog.Warning("During Out of Combat Loop");
-                if (_token.IsCancellationRequested)
-                {
-                    _token.ThrowIfCancellationRequested();
-                }
-                var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
-                if (!inCombat)
-                {
-                    PluginLog.Warning("NOT in Combat");
-                    await Task.Delay(50, _token);
-                    continue;
-                }
-                PluginLog.Warning("Starting In Combat Loop");
-                _tasks.Add(Task.Run(InCombatUpdate, _token));
-                break;
-            }
-        }
-        private async Task InCombatUpdate()
-        {
-            PluginLog.Warning("In Combat Loop");
-            CleanTasks();
-            Task pattern;
-            var cancellationSource = new CancellationTokenSource();
-            var patternToken = cancellationSource.Token;
-            var enumerator = _pattern.GetAsyncEnumerator(patternToken);
-            while (true)
-            {
-                PluginLog.Warning("During Combat Loop");
-                if (_token.IsCancellationRequested)
-                {
-                    _token.ThrowIfCancellationRequested();
-                }
-                var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
-                if (!inCombat)
-                {
-                    PluginLog.Warning("Starting Out of Combat Loop");
-                    _ffxivSetState(_maybeControllerStruct, 0, 0);
-                    _tasks.Add(Task.Run(OutOfCombatUpdate, _token));
-                    break;
-                }
-                var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup-1);
-                PluginLog.Warning("Checking Cooldown");
-                if (!cooldown)
-                {
-                    PluginLog.Warning("Pattern execution");
-                    if (await enumerator.MoveNextAsync())
-                    {
-                        var s = enumerator.Current;
-                        PluginLog.Log($"Pattern for {_cooldownGroup}: {s}");
-                        _ffxivSetState(_maybeControllerStruct, s.RightMotorPercentage, s.LeftMotorPercentage);
-                    }
-                }
-                else
-                {
-                    PluginLog.Warning("On Cooldown");
-                    cancellationSource.Cancel();
-                    cancellationSource = new CancellationTokenSource();
-                    patternToken = cancellationSource.Token;
-                    enumerator = _pattern.GetAsyncEnumerator(patternToken);
-                    _ffxivSetState(_maybeControllerStruct, 0, 0);
-                }
-                await Task.Delay(10, _token);
-            }
-
-        }
-
-        private void CleanTasks()
-        {
-            foreach (var task in _tasks.Where(t => t.IsCanceled || t.IsCompleted))
-            {
-                task.Dispose();
-            }
-            _tasks.RemoveAll(t => t.IsCanceled || t.IsCompleted);
-        }
-
         private int ControllerPollDetour(nint maybeControllerStruct)
         {
             _maybeControllerStruct = maybeControllerStruct;
+            #if DEBUG
+            var original = _controllerPoll.Original(maybeControllerStruct);
+            _lastReturnedFromPoll[_currentIndex++ % _lastReturnedFromPoll.Length] = original;
+            // TODO (Chiv) Interpretation happens inside method, log appears after map (0x40 = Square/X)
+            //if(original is 0x40) PluginLog.Warning("Should block!");
+            //return original is 0x40 ? 0 : original;
+            return original;
+#else
             _controllerPoll.Disable();
             return _controllerPoll.Original(maybeControllerStruct);
+#endif
+
         }
 
         #region UI
 
         private void BuildUi()
         {
-            _shouldDrawConfigUi = _shouldDrawConfigUi && DrawConfigUi(_config, _pluginInterface.SavePluginConfig);
+            _shouldDrawConfigUi = _shouldDrawConfigUi &&
+                                  ConfigurationUi.DrawConfigUi(ref _config, _pluginInterface.SavePluginConfig);
             
             #if DEBUG
+            DrawDebugUi();
+            #endif
+        }
+        #if DEBUG
+        private void DrawDebugUi()
+        {
             ImGui.Begin($"{Constant.PluginName} Debug");
+            ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
+            ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
+            foreach (var i in _lastReturnedFromPoll)
+            {
+                ImGui.SameLine();
+                ImGui.Text($"{i:X}");
+            }
+            ImGui.Text($"{Marshal.ReadInt32(_maybeControllerStruct,0x88):X}:int (hex) at {nameof(_maybeControllerStruct)}+0x88");
+            ImGui.Separator();
+            ImGui.Text("First Pattern Name: "); ImGui.SameLine(); ImGui.Text($"{_config.Patterns[0]?.Name}");
+            
+            ImGui.Separator();
+            ImGui.InputInt("RightMotorSpeed", ref _rightMotorSpeed);
+            ImGui.InputInt("LeftMotorSpeed", ref _leftMotorSpeed);
+            ImGui.InputInt("Cooldown Group", ref _cooldownGroup);
             if (ImGui.Button("FFXIV SetState"))
             {
                 _ffxivSetState(_maybeControllerStruct, _rightMotorSpeed, _leftMotorSpeed);
@@ -291,45 +250,25 @@ namespace GentleTouch
             if (ImGui.Button("XInput Wrapper SetSate"))
             {
                 var state = new XInputVibration((ushort) _leftMotorSpeed, (ushort) _rightMotorSpeed);
-                _xInputWrapperSetState(0,ref state);
+                _xInputWrapperSetState(0, ref state);
             }
 
             if (ImGui.Button("Stop Vibration"))
             {
                 _ffxivSetState(_maybeControllerStruct, 0, 0);
             }
-            ImGui.InputInt("RightMotorSpeed", ref _rightMotorSpeed);
-            ImGui.InputInt("LeftMotorSpeed", ref _leftMotorSpeed);
-            ImGui.InputInt("Cooldown Group", ref _cooldownGroup);
             ImGui.Separator();
             //var cooldown = new Cooldown(0, 9999,-1,-1);
             // NOTE (Chiv): 58 is GCD
-            var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup-1);
+            var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup - 1);
             ImGui.Text($"Cooldown Elapsed: {cooldown.CooldownElapsed}");
             ImGui.Text($"Cooldown Total: {cooldown.CooldownTotal}");
             ImGui.Text($"IsCooldown: {cooldown.IsCooldown}");
             ImGui.Text($"ActionID: {cooldown.ActionID}");
             ImGui.End();
-            #endif
         }
-
-        private static bool DrawConfigUi(Configuration config, Action<IPluginConfiguration> saveConfiguration)
-        {
-            var shouldDrawConfigUi = true;
-            var scale = ImGui.GetIO().FontGlobalScale;
-            ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
-                new Vector2(600 * scale, 800 * scale));
-            ImGui.Begin($"{Constant.PluginName} Configuration", ref shouldDrawConfigUi, ImGuiWindowFlags.NoCollapse);
-            if (ImGui.Checkbox(nameof(config.ShouldVibrateDuringPvP), ref config.ShouldVibrateDuringPvP))
-                saveConfiguration(config);
-            if (ImGui.Checkbox(nameof(config.ShouldVibrateDuringCasting), ref config.ShouldVibrateDuringCasting))
-                saveConfiguration(config);
-            if (ImGui.Checkbox(nameof(config.ShouldVibrateWithSheathedWeapon),
-                ref config.ShouldVibrateWithSheathedWeapon)) saveConfiguration(config);
-
-            ImGui.End();
-            return shouldDrawConfigUi;
-        }
+        #endif
+        
 
         private void OnOpenConfigUi(object sender, EventArgs e)
         {
@@ -359,10 +298,7 @@ namespace GentleTouch
                 _pluginInterface.CommandManager.RemoveHandler(Command);
                 // TODO TESTING
                 
-                _tokenSource.Cancel();
-                while(!_tasks.TrueForAll(t => t.IsCanceled || t.IsCompleted )) {}
-                _tasks.ForEach(t => t.Dispose());
-                _tokenSource.Dispose();
+                
                 // TODO TESTING END
             }
 

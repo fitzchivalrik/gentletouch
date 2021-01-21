@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Configuration;
 using Dalamud.Game.ClientState;
@@ -12,12 +13,13 @@ namespace GentleTouch
     {
         public int Version { get; set; }
 
-        public bool ShouldVibrateDuringPvP;
+        public bool ShouldVibrateDuringPvP { get; init; }
 
-        public bool ShouldVibrateWithSheathedWeapon;
+        public bool ShouldVibrateWithSheathedWeapon { get; init; }
 
-        public bool ShouldVibrateDuringCasting;
+        public bool ShouldVibrateDuringCasting { get; init; }
 
+        public List<VibrationPattern> Patterns { get; init; } = new();
 
     }
 }

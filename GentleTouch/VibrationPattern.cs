@@ -7,46 +7,35 @@ using System.Threading.Tasks;
 
 namespace GentleTouch
 {
-    internal record VibrationPattern
+    public record VibrationPattern
     {
-        internal record Step (
+        public record Step (
             ushort LeftMotorPercentage,
             ushort RightMotorPercentage,
-            ushort MillisecondsTillNextStep = 100
-            );
+            ushort MillisecondsTillNextStep = 100);
 
-        internal IEnumerable<Step> Steps { get; init; }
-        internal int Cycles { get; init; } = 1;
-
+        public IEnumerable<Step> Steps { get; init; }
+        public int Cycles { get; init; } = 1;
+        public Guid Guid { get; init; } = Guid.NewGuid();
+        public string Name { get; init; } = "Nameless";
+        public bool Infinite { get; init; } = false;
+        
         internal IEnumerator<Step?> GetEnumerator()
         {
             var nextTimeStep = 0L;
-
-            for (var i = 0; i < Cycles; i++)
+            for (var i = 0; Infinite || i < Cycles; i++)
             {
                 foreach (var s in Steps)
                 {
                     while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
                         yield return null;
-                    yield return s;
                     nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + s.MillisecondsTillNextStep;
+                    yield return s;
                 }
                 while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
                     yield return null;
             }
         }
-
-        internal async IAsyncEnumerator<Step> GetAsyncEnumerator(CancellationToken token)
-        {
-            for (var i = 0; i < Cycles; i++)
-            {
-                foreach (var s in Steps)
-                {
-                    yield return s;
-                    await Task.Delay(s.MillisecondsTillNextStep, token);
-                }
-            }
-        } 
     }
     
     
