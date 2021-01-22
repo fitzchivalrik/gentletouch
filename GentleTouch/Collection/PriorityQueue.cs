@@ -1,15 +1,14 @@
 ﻿// NOTE (CHIV): https://github.com/pgolebiowski/dotnet-runtime-fork/blob/master/src/libraries/System.Collections/src/System/Collections/Generic/PriorityQueue.cs
 // Modifications: Removed internal only stuff and changed namespace
-
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-
+#pragma warning disable CS8601
+// ReSharper disable All
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
+
 
 namespace GentleTouch.Collection
 {

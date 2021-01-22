@@ -43,10 +43,12 @@ namespace GentleTouch
         private readonly DalamudPluginInterface _pluginInterface;
         private Configuration _config;
 
+        #if DEBUG
         // TODO TESTING
-
-        private int _rightMotorSpeed = 0;
+        
+        private int _rightMotorSpeed = 100;
         private int _leftMotorSpeed = 0;
+        private int _dwControllerIndex = 1;
         private int _cooldownGroup = 58;
         private int _nextStep = 0;
         private long _nextTimeStep = 0;
@@ -68,15 +70,15 @@ namespace GentleTouch
 
         private readonly List<VibrationCooldownTrigger> _debugTriggers = new();
         private static readonly IComparer<int> Comparer = Comparer<int>.Create((lhs, rhs) => rhs - lhs);
-        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue= new (Comparer);
+        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue= new ();
 
         private readonly SortedDictionary<int, VibrationCooldownTrigger> _dicQueue = new(Comparer);
 
         private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
 
-        private VibrationCooldownTrigger? _currentTrigger;
+        private VibrationCooldownTrigger? _highestPriorityTrigger;
         //TODO END TESTING
-
+        #endif
 
         private nint _maybeControllerStruct;
         private bool _shouldDrawConfigUi =
@@ -123,9 +125,19 @@ namespace GentleTouch
                 pi.SavePluginConfig(config);
             }
 
-            _debugTriggers.Add(new VibrationCooldownTrigger("GCD", -1, 58, MinValue, config.Patterns[1]));
+            PluginLog.Warning($"{config.Patterns[1].Name}");
+            _debugTriggers.Add(new VibrationCooldownTrigger("GCD", -1, 58, 2, config.Patterns[1]));
             _debugTriggers.Add(new VibrationCooldownTrigger("Hide", 2245, 6, 1, config.Patterns[0]));
-            _debugTriggers.Add(new VibrationCooldownTrigger("Shade Shift", 2241, 21, 2, config.Patterns[0]));
+            _debugTriggers.Add(new VibrationCooldownTrigger("Shade Shift", 2241, 21, 0, config.Patterns[0]));
+
+            _queue.EnqueueRange(_debugTriggers.Select(t => (t, t.Priority)));
+            var first = _queue.Dequeue();
+            var second = _queue.Dequeue();
+            var third = _queue.Dequeue();
+            PluginLog.Log($"Name {first.ActionName}, Prio: {first.Priority}");
+            PluginLog.Log($"Name {second.ActionName}, Prio: {second.Priority}");
+            PluginLog.Log($"Name {third.ActionName}, Prio: {third.Priority}");
+            PluginLog.Log($"Empty? {_queue.Count == 0}");
             // TODO END TESTING
             
             _pluginInterface = pi;
@@ -158,85 +170,131 @@ namespace GentleTouch
             });
             //TODO END TESTING
         }
-
+        
         private void FrameworkInCombatUpdate(Framework framework)
         {
-            var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
-            if (!inCombat)
+            void ToOutOfCombatLoop()
             {
-                _queue.Clear();
-                _currentTrigger = null;
-                _currentEnumerator?.Dispose();
-                _currentEnumerator = null;
-                _ffxivSetState(_maybeControllerStruct, 0, 0);
+                ControllerSetState(0, 0);
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+            }
+
+            if (!this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat))
+            {
+                _queue.Clear();
+                _highestPriorityTrigger = null;
+                _currentEnumerator?.Dispose();
+                _currentEnumerator = null;
+                return;
+            }
+            var weaponOut = _config.OnlyVibrateWithDrawnWeapon && this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.WeaponOut);
+            if (_config.OnlyVibrateWithDrawnWeapon && !weaponOut)
+            {
+                
+                ToOutOfCombatLoop();
                 return;
             }
 
+            UpdateQueue();
+            UpdateHighestPriorityTrigger();
+            CheckAndVibrate();
+        }
+
+        private void CheckAndVibrate()
+        {
+            if (_currentEnumerator is null) return;
+            if (_currentEnumerator.MoveNext())
+            {
+                var s = _currentEnumerator.Current;
+                if (s is not null)
+                {
+                    ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
+                }
+            }
+            else
+            {
+                ControllerSetState(0, 0);
+                _currentEnumerator.Dispose();
+                _currentEnumerator = null;
+                _highestPriorityTrigger = null;
+            }
+        }
+
+        private void UpdateHighestPriorityTrigger()
+        {
+            if (!_queue.TryPeek(out _, out var priority)) return;
+            PluginLog.Warning($"Heap element Prio: {priority}, currentElementPrio: {_highestPriorityTrigger?.Priority}");
+            if ((_highestPriorityTrigger?.Priority ?? MaxValue) <= priority) return;
+            if (_highestPriorityTrigger?.Pattern.Infinite ?? false)
+            {
+                _highestPriorityTrigger.ShouldBeTriggered = true;
+            }
+            _currentEnumerator?.Dispose();
+            _highestPriorityTrigger = _queue.Dequeue();
+            _currentEnumerator = _highestPriorityTrigger.Pattern.GetEnumerator();
+            PluginLog.Warning($"{(_currentEnumerator is null ? "Enumerator is null!" : "Enumereator not null")}");
+            ControllerSetState(0, 0);
+            PluginLog.Warning($"Set Current to {_highestPriorityTrigger.ActionName}");
+        }
+
+        private void UpdateQueue()
+        {
             var cooldowns =
                 _debugTriggers.Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
 
-            
-            foreach (var valueTuple in cooldowns.Where(t => t.Item2))
+
+            var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown)[] ?? cooldowns.ToArray();
+            foreach (var (t, _) in tuples.Where(t => t.Item2))
             {
-                if (_currentTrigger == valueTuple.t)
+                if (_highestPriorityTrigger == t)
                 {
                     _currentEnumerator!.Dispose();
                     _currentEnumerator = null;
-                    _currentTrigger = null;
-                    _ffxivSetState(_maybeControllerStruct, 0, 0);
+                    _highestPriorityTrigger = null;
+                    ControllerSetState(0, 0);
                 }
-                valueTuple.t.ShouldBeTriggered = true;
 
-            }
-            var filtered = cooldowns.Where(t => !t.Item2 && t.t.ShouldBeTriggered && t.t != _currentTrigger);
-            
-            _queue.EnqueueRange(filtered.Select(t => (t.t, t.t.Priority)));
-            var priority = -1;
-            var trigger = default(VibrationCooldownTrigger);
-            if (_queue.TryPeek(out trigger, out priority))
-            {
-                if ((_currentTrigger?.Priority ?? MinValue) > priority)
-                {
-                    _currentEnumerator?.Dispose();
-                    _currentTrigger = _queue.Dequeue();
-                    _currentEnumerator = _currentTrigger.Pattern.GetEnumerator();
-                    _currentTrigger.ShouldBeTriggered = _currentTrigger.Pattern.Infinite;
-                    _ffxivSetState(_maybeControllerStruct, 0, 0);
-                }
-                PluginLog.Warning($"Heap element Prio: {priority}, currentElementPrio: {_currentTrigger?.Priority}");
+                t.ShouldBeTriggered = true;
             }
 
-            if (_currentEnumerator is not null)
+            var filtered = tuples.Where(t => !t.Item2 && t.t.ShouldBeTriggered);
+            var valueTuples = filtered as (VibrationCooldownTrigger t, Cooldown)[] ?? filtered.ToArray();
+            foreach (var valueTuple in valueTuples)
             {
-                if (_currentEnumerator.MoveNext())
-                {
-                    var s = _currentEnumerator.Current;
-                    if (s is not null)
-                    {
-                        _ffxivSetState(_maybeControllerStruct, s.RightMotorPercentage, s.LeftMotorPercentage);
-                    }
-                }
-                else
-                {
-                    _ffxivSetState(_maybeControllerStruct, 0, 0);
-                    _currentEnumerator.Dispose();
-                    _currentEnumerator = null;
-                    _currentTrigger = null;
-                }
+                valueTuple.t.ShouldBeTriggered = false;
             }
+
+            _queue.EnqueueRange(valueTuples.Select(t => (t.t, t.t.Priority)));
         }
+
         private void FrameworkOutOfCombatUpdate(Framework framework)
         {
             
-            // TODO !
             var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
             if (!inCombat) return;
+            var weaponOut = _config.OnlyVibrateWithDrawnWeapon && this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.WeaponOut);
+            if (_config.OnlyVibrateWithDrawnWeapon && !weaponOut) return;
             _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
 
 
+        }
+        
+        private void ControllerSetState(int leftMotorPercentage, int rightMotorPercentage, bool direct = true, int dwControllerIndex = 1)
+        {
+            #if DEBUG
+            PluginLog.Verbose($"Setting controller state to L: {leftMotorPercentage}, R: {rightMotorPercentage}, direct? {direct}, Index: {dwControllerIndex}");
+            #endif
+            if (direct)
+            {
+                var t = new XInputVibration((ushort)(leftMotorPercentage * ushort.MaxValue), (ushort)(rightMotorPercentage * ushort.MaxValue));
+                _xInputWrapperSetState(dwControllerIndex, ref t);
+            }
+            else
+            {
+                _ffxivSetState(_maybeControllerStruct, rightMotorPercentage, leftMotorPercentage);
+            }
         }
 
         private int ControllerPollDetour(nint maybeControllerStruct)
@@ -271,6 +329,13 @@ namespace GentleTouch
         private void DrawDebugUi()
         {
             ImGui.Begin($"{Constant.PluginName} Debug");
+            ImGui.Text($"Same Pattern ID? {(_config.Patterns[1] == _debugTriggers[0].Pattern)}");
+            ImGui.Text($"Trigger: {_debugTriggers[0]?.ActionName}");
+            foreach (var step in _debugTriggers[0]?.Pattern?.Steps)
+            {
+                ImGui.Text($"Step L: {step.LeftMotorPercentage} R: {step.RightMotorPercentage} {step.MillisecondsTillNextStep}ms");
+            }
+            ImGui.Separator();
             ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
             ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
             foreach (var i in _lastReturnedFromPoll)
@@ -283,26 +348,29 @@ namespace GentleTouch
             ImGui.Text("First Pattern Name: "); ImGui.SameLine(); ImGui.Text($"{_config.Patterns[0]?.Name}");
             
             ImGui.Separator();
+            ImGui.PushItemWidth(100);
             ImGui.InputInt("RightMotorSpeed", ref _rightMotorSpeed);
-            ImGui.InputInt("LeftMotorSpeed", ref _leftMotorSpeed);
+            ImGui.SameLine(); ImGui.InputInt("LeftMotorSpeed", ref _leftMotorSpeed);
             ImGui.InputInt("Cooldown Group", ref _cooldownGroup);
+            ImGui.SameLine(); ImGui.InputInt("Controller Index", ref _dwControllerIndex);
             if (ImGui.Button("FFXIV SetState"))
             {
-                _ffxivSetState(_maybeControllerStruct, _rightMotorSpeed, _leftMotorSpeed);
+                ControllerSetState((ushort)_leftMotorSpeed, (ushort)_rightMotorSpeed);
             }
 
-            if (ImGui.Button("XInput Wrapper SetSate"))
+            ImGui.SameLine(); if (ImGui.Button("XInput Wrapper SetSate"))
             {
-                var state = new XInputVibration((ushort) _leftMotorSpeed, (ushort) _rightMotorSpeed);
-                _xInputWrapperSetState(0, ref state);
+                ControllerSetState((ushort)_leftMotorSpeed, (ushort)_rightMotorSpeed, true, _dwControllerIndex);
             }
-
-            if (ImGui.Button("Stop Vibration"))
+            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1,0,0,1));
+            ImGui.SameLine(); if (ImGui.Button("Stop Vibration"))
             {
-                _ffxivSetState(_maybeControllerStruct, 0, 0);
+                ControllerSetState(0,0,true,0);
+                ControllerSetState(0,0,true,1);
             }
+            ImGui.PopStyleColor();
             ImGui.Separator();
-            //var cooldown = new Cooldown(0, 9999,-1,-1);
+            ImGui.PopItemWidth();
             // NOTE (Chiv): 58 is GCD
             var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup - 1);
             ImGui.Text($"Cooldown Elapsed: {cooldown.CooldownElapsed}");

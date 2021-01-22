@@ -7,18 +7,27 @@ using System.Threading.Tasks;
 
 namespace GentleTouch
 {
-    public record VibrationPattern
+    public class VibrationPattern
     {
-        public record Step (
-            ushort LeftMotorPercentage,
-            ushort RightMotorPercentage,
-            ushort MillisecondsTillNextStep = 100);
+        public class Step
+        {
+            public int LeftMotorPercentage;
+            public int RightMotorPercentage;
+            public int MillisecondsTillNextStep;
+            public Step(
+                int leftMotorPercentage,
+                int rightMotorPercentage,
+                int millisecondsTillNextStep = 100) =>
+            (LeftMotorPercentage, RightMotorPercentage, MillisecondsTillNextStep)
+                = (leftMotorPercentage, rightMotorPercentage, millisecondsTillNextStep);
+            
+        };
 
-        public IEnumerable<Step> Steps { get; init; }
-        public int Cycles { get; init; } = 1;
-        public Guid Guid { get; init; } = Guid.NewGuid();
-        public string Name { get; init; } = "Nameless";
-        public bool Infinite { get; init; } = false;
+        public IList<Step> Steps = new List<Step>();
+        public int Cycles = 1;
+        public readonly Guid Guid = Guid.NewGuid();
+        public string Name = "Nameless";
+        public bool Infinite;
         
         internal IEnumerator<Step?> GetEnumerator()
         {

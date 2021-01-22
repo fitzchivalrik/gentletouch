@@ -2,17 +2,17 @@
 
 namespace GentleTouch
 {
-    internal class VibrationCooldownTrigger
+    public class VibrationCooldownTrigger
     {
-      internal string ActionName { get; init; }    
-      internal int ActionId { get; init; }    
-      internal int ActionCooldownGroup { get; init; }    
-      internal int Priority { get; init; }    
-      internal VibrationPattern Pattern { get; init; }
+        public string ActionName;
+        public int ActionId;
+        public int ActionCooldownGroup;
+        public int Priority;
+        public VibrationPattern Pattern;
 
-      [JsonIgnore] internal bool ShouldBeTriggered { get; set; } = false;  
+        [JsonIgnore] internal bool ShouldBeTriggered;  
       
-      internal VibrationCooldownTrigger(string actionName, int actionId, int actionCooldownGroup, int priority,
+      public VibrationCooldownTrigger(string actionName, int actionId, int actionCooldownGroup, int priority,
           VibrationPattern pattern) =>
           (ActionName, ActionId, ActionCooldownGroup, Priority, Pattern)
           = (actionName, actionId, actionCooldownGroup, priority, pattern);

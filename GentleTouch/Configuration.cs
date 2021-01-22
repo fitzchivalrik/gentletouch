@@ -13,13 +13,13 @@ namespace GentleTouch
     {
         public int Version { get; set; }
 
-        public bool ShouldVibrateDuringPvP { get; init; }
+        public bool ShouldVibrateDuringPvP;
 
-        public bool ShouldVibrateWithSheathedWeapon { get; init; }
+        public bool OnlyVibrateWithDrawnWeapon;
 
-        public bool ShouldVibrateDuringCasting { get; init; }
+        public bool ShouldVibrateDuringCasting;
 
-        public List<VibrationPattern> Patterns { get; init; } = new();
+        public List<VibrationPattern> Patterns = new();
 
     }
 }

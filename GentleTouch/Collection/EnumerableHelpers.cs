@@ -1,7 +1,8 @@
 ﻿//https://github.com/pgolebiowski/dotnet-runtime-fork/blob/master/src/libraries/Common/src/System/Collections/Generic/EnumerableHelpers.cs
+// Modifications: Removed internal only stuff and changed namespace
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
-
+// ReSharper disable All
 using System;
 using System.Collections.Generic;
 

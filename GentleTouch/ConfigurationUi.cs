@@ -14,96 +14,29 @@ namespace GentleTouch
 {
     internal static class ConfigurationUi
     {
-        private class MutableConfiguration
-        {
-            internal class MutableVibrationPattern
-            {
-                internal class MutableStep
-                {
-                    internal int LeftMotorPercentage;
-                    internal int RightMotorPercentage;
-                    internal int CentisecondsTillNextStep;
-                
-                    internal MutableStep(VibrationPattern.Step s) =>
-                        (LeftMotorPercentage, RightMotorPercentage, CentisecondsTillNextStep) 
-                        = (s.LeftMotorPercentage, s.RightMotorPercentage, s.MillisecondsTillNextStep/10);
-
-                    internal MutableStep() =>
-                        (LeftMotorPercentage, RightMotorPercentage, CentisecondsTillNextStep)
-                        = (0, 0, 0);
-                }
-
-                internal List<MutableStep> Steps;
-                internal int Cycles;
-                internal readonly Guid Guid;
-                internal string Name;
-                internal bool Infinite;
-
-                internal MutableVibrationPattern(VibrationPattern p) =>
-                    (Cycles, Guid, Name, Infinite, Steps)
-                    = (p.Cycles, p.Guid, p.Name,p.Infinite, p.Steps.Select(s => new MutableStep(s)).ToList());
-
-                internal MutableVibrationPattern() =>
-                    (Cycles, Guid, Name, Infinite, Steps)
-                    = (0, Guid.NewGuid(), "Nameless", false, new List<MutableStep>());
-            }
-            
-            //TODO (chiv) Auto code generation based on Configuration or there like would be neat
-            internal int Version;
-            internal bool ShouldVibrateDuringCasting;
-            internal bool ShouldVibrateDuringPvP;
-            internal bool ShouldVibrateWithSheathedWeapon;
-            internal List<MutableVibrationPattern> Patterns;
-
-            internal MutableConfiguration(Configuration c) =>
-                (Version, ShouldVibrateDuringCasting, ShouldVibrateDuringPvP, ShouldVibrateWithSheathedWeapon, Patterns)
-                = (c.Version, c.ShouldVibrateDuringCasting, c.ShouldVibrateDuringPvP, c.ShouldVibrateWithSheathedWeapon,
-                    c.Patterns.Select(p => new MutableVibrationPattern(p)).ToList());
-
-            public static implicit operator Configuration(MutableConfiguration c) =>
-                new()
-                {
-                    Version = c.Version,
-                    ShouldVibrateDuringCasting = c.ShouldVibrateDuringCasting,
-                    ShouldVibrateDuringPvP = c.ShouldVibrateDuringPvP,
-                    ShouldVibrateWithSheathedWeapon = c.ShouldVibrateWithSheathedWeapon,
-                    Patterns = c.Patterns.Select(p => new VibrationPattern()
-                    {
-                        Cycles = p.Cycles,
-                        Guid = p.Guid,
-                        Infinite = p.Infinite,
-                        Name = p.Name,
-                        Steps = p.Steps.Select(s => new VibrationPattern.Step((ushort)s.LeftMotorPercentage,
-                            (ushort)s.RightMotorPercentage, (ushort)(s.CentisecondsTillNextStep*10)))
-                    }).ToList()
-                };
-
-        }
-        
         internal static bool DrawConfigUi(ref Configuration config, Action<IPluginConfiguration> save)
         {
             var shouldDrawConfigUi = true;
-            var mutableConfig = new MutableConfiguration(config);
             var changed = false;
             var scale = ImGui.GetIO().FontGlobalScale;
             ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
                 new Vector2(1200 * scale, 1000 * scale));
             ImGui.Begin($"{Constant.PluginName} Configuration", ref shouldDrawConfigUi, ImGuiWindowFlags.NoCollapse);
-            if (ImGui.Checkbox(nameof(config.ShouldVibrateDuringPvP), ref mutableConfig.ShouldVibrateDuringPvP))
+            if (ImGui.Checkbox(nameof(config.ShouldVibrateDuringPvP), ref config.ShouldVibrateDuringPvP))
                 changed = true;
-            if (ImGui.Checkbox(nameof(config.ShouldVibrateDuringCasting), ref mutableConfig.ShouldVibrateDuringCasting))
+            if (ImGui.Checkbox(nameof(config.ShouldVibrateDuringCasting), ref config.ShouldVibrateDuringCasting))
                 changed = true;
-            if (ImGui.Checkbox(nameof(config.ShouldVibrateWithSheathedWeapon),
-                ref mutableConfig.ShouldVibrateWithSheathedWeapon)) changed = true;
+            if (ImGui.Checkbox(nameof(config.OnlyVibrateWithDrawnWeapon),
+                ref config.OnlyVibrateWithDrawnWeapon)) changed = true;
             ImGui.Separator();
             if (ImGui.Button("A"))
             {
-                mutableConfig.Patterns.Add(new MutableConfiguration.MutableVibrationPattern());
+                config.Patterns.Add(new VibrationPattern());
                 changed = true;
             }
 
-            var toRemovePatterns = new List<MutableConfiguration.MutableVibrationPattern>();
-            foreach (var pattern in mutableConfig.Patterns)
+            var toRemovePatterns = new List<VibrationPattern>();
+            foreach (var pattern in config.Patterns)
             {
                 if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale)))
                 {
@@ -158,7 +91,7 @@ namespace GentleTouch
                     var toRemoveSteps = new List<int>();
                     if (ImGui.Button("A"))
                     {
-                        pattern.Steps.Add(new MutableConfiguration.MutableVibrationPattern.MutableStep());
+                        pattern.Steps.Add(new VibrationPattern.Step(0,0));
                         changed = true;
                     }
 
@@ -217,8 +150,12 @@ namespace GentleTouch
                             }
 
                             ImGui.SameLine();
-                            if (ImGui.InputInt($"##Centiseconds till next step", ref s.CentisecondsTillNextStep, 10))
+                            var centisecondsTillNextStep = s.MillisecondsTillNextStep / 10;
+                            if (ImGui.InputInt($"##Centiseconds till next step", ref centisecondsTillNextStep, 1))
+                            {
+                                s.MillisecondsTillNextStep = centisecondsTillNextStep * 10;
                                 changed = true;
+                            }
                             if (ImGui.IsItemHovered())
                             {
                                 ImGui.BeginTooltip();
@@ -255,7 +192,11 @@ namespace GentleTouch
                             }
                             ImGui.SameLine();
                             ImGui.SetNextItemWidth(32 * scale);
-                            if (ImGui.InputInt($"##centi", ref s.CentisecondsTillNextStep, 0)) changed = true;
+                            if (ImGui.InputInt($"##centi", ref centisecondsTillNextStep, 0))
+                            {
+                                s.MillisecondsTillNextStep = centisecondsTillNextStep * 10;
+                                changed = true;
+                            }
                             //if (ImGui.DragInt("##milli", ref s.MillisecondsTillNextStep, 10, 10, 5000)) changed = true;
                             if (ImGui.IsItemHovered())
                             {
@@ -308,11 +249,10 @@ namespace GentleTouch
 
             foreach (var pattern in toRemovePatterns)
             {
-                mutableConfig.Patterns.Remove(pattern);
+                config.Patterns.Remove(pattern);
             }
             ImGui.End();
             if (!changed) return shouldDrawConfigUi;
-            config = mutableConfig;
             save(config);
             return shouldDrawConfigUi;
         }
