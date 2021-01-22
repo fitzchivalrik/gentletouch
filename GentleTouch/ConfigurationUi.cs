@@ -148,9 +148,13 @@ namespace GentleTouch
                         ImGui.EndTooltip();
                     }
 #endif
-                    if (ImGui.InputTextWithHint("Pattern Name", "Name of Pattern", ref pattern.Name, 16))
+                    ImGui.SetNextItemWidth(150);
+                    if (ImGui.InputTextWithHint("Pattern Name", "Name of Pattern", ref pattern.Name, 32))
                         changed = true;
+                    ImGui.SetNextItemWidth(75);
                     if (ImGui.InputInt($"Cycles", ref pattern.Cycles, 1)) changed = true;
+                    ImGui.SameLine();
+                    if (ImGui.Checkbox("Infinite", ref pattern.Infinite)) changed = true;
                     var toRemoveSteps = new List<int>();
                     if (ImGui.Button("A"))
                     {

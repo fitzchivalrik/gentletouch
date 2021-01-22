@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +13,10 @@ using Dalamud.Game.Command;
 using Dalamud.Game.Internal;
 using Dalamud.Hooking;
 using GentleTouch.Caraxi;
+using GentleTouch.Collection;
 using ImGuiNET;
+using static System.Int32;
+using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 namespace GentleTouch
 {
@@ -50,7 +54,6 @@ namespace GentleTouch
         private int _currentIndex = 0;
 
         private bool reset = false;
-        private IEnumerator<VibrationPattern.Step?> _currentIterator;
         private VibrationPattern _pattern = new()
         {
             Steps = new[]
@@ -62,6 +65,16 @@ namespace GentleTouch
             Infinite = true,
             Name = "SimplePattern"
         };
+
+        private readonly List<VibrationCooldownTrigger> _debugTriggers = new();
+        private static readonly IComparer<int> Comparer = Comparer<int>.Create((lhs, rhs) => rhs - lhs);
+        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue= new (Comparer);
+
+        private readonly SortedDictionary<int, VibrationCooldownTrigger> _dicQueue = new(Comparer);
+
+        private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
+
+        private VibrationCooldownTrigger? _currentTrigger;
         //TODO END TESTING
 
 
@@ -109,6 +122,10 @@ namespace GentleTouch
                 config.Patterns.Add(_pattern);
                 pi.SavePluginConfig(config);
             }
+
+            _debugTriggers.Add(new VibrationCooldownTrigger("GCD", -1, 58, MinValue, config.Patterns[1]));
+            _debugTriggers.Add(new VibrationCooldownTrigger("Hide", 2245, 6, 1, config.Patterns[0]));
+            _debugTriggers.Add(new VibrationCooldownTrigger("Shade Shift", 2241, 21, 2, config.Patterns[0]));
             // TODO END TESTING
             
             _pluginInterface = pi;
@@ -147,39 +164,67 @@ namespace GentleTouch
             var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
             if (!inCombat)
             {
+                _queue.Clear();
+                _currentTrigger = null;
+                _currentEnumerator?.Dispose();
+                _currentEnumerator = null;
                 _ffxivSetState(_maybeControllerStruct, 0, 0);
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
                 return;
             }
 
+            var cooldowns =
+                _debugTriggers.Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
 
-            var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup-1);
-            if (!cooldown)
+            
+            foreach (var valueTuple in cooldowns.Where(t => t.Item2))
             {
-                if (_currentIterator.MoveNext())
+                if (_currentTrigger == valueTuple.t)
                 {
-                    var s = _currentIterator.Current;
+                    _currentEnumerator!.Dispose();
+                    _currentEnumerator = null;
+                    _currentTrigger = null;
+                    _ffxivSetState(_maybeControllerStruct, 0, 0);
+                }
+                valueTuple.t.ShouldBeTriggered = true;
+
+            }
+            var filtered = cooldowns.Where(t => !t.Item2 && t.t.ShouldBeTriggered && t.t != _currentTrigger);
+            
+            _queue.EnqueueRange(filtered.Select(t => (t.t, t.t.Priority)));
+            var priority = -1;
+            var trigger = default(VibrationCooldownTrigger);
+            if (_queue.TryPeek(out trigger, out priority))
+            {
+                if ((_currentTrigger?.Priority ?? MinValue) > priority)
+                {
+                    _currentEnumerator?.Dispose();
+                    _currentTrigger = _queue.Dequeue();
+                    _currentEnumerator = _currentTrigger.Pattern.GetEnumerator();
+                    _currentTrigger.ShouldBeTriggered = _currentTrigger.Pattern.Infinite;
+                    _ffxivSetState(_maybeControllerStruct, 0, 0);
+                }
+                PluginLog.Warning($"Heap element Prio: {priority}, currentElementPrio: {_currentTrigger?.Priority}");
+            }
+
+            if (_currentEnumerator is not null)
+            {
+                if (_currentEnumerator.MoveNext())
+                {
+                    var s = _currentEnumerator.Current;
                     if (s is not null)
                     {
-                        PluginLog.Log($"Pattern for {_cooldownGroup}: {s}");
-                        _ffxivSetState(_maybeControllerStruct, s.RightMotorPercentage, s.LeftMotorPercentage);                        
-                    }
-                    else
-                    {
-                        PluginLog.Log("Current step was NULL");
+                        _ffxivSetState(_maybeControllerStruct, s.RightMotorPercentage, s.LeftMotorPercentage);
                     }
                 }
                 else
                 {
-                    PluginLog.Warning("Ressetting pattern");
-                    _currentIterator = _config.Patterns[0].GetEnumerator();
+                    _ffxivSetState(_maybeControllerStruct, 0, 0);
+                    _currentEnumerator.Dispose();
+                    _currentEnumerator = null;
+                    _currentTrigger = null;
                 }
-            }
-            else
-            {
-                _currentIterator = _config.Patterns[0].GetEnumerator();
-                _ffxivSetState(_maybeControllerStruct, 0, 0);
             }
         }
         private void FrameworkOutOfCombatUpdate(Framework framework)
@@ -188,7 +233,6 @@ namespace GentleTouch
             // TODO !
             var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
             if (!inCombat) return;
-            _currentIterator = _config.Patterns[0].GetEnumerator();
             _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
 
