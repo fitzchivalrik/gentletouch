@@ -25,10 +25,10 @@ namespace GentleTouch
 
         public IList<Step> Steps = new List<Step>();
         public int Cycles = 1;
-        public readonly Guid Guid = Guid.NewGuid();
+        public Guid Guid = Guid.NewGuid();
         public string Name = "Nameless";
         public bool Infinite;
-        
+
         internal IEnumerator<Step?> GetEnumerator()
         {
             var nextTimeStep = 0L;

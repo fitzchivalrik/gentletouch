@@ -19,7 +19,12 @@ namespace GentleTouch
 
         public bool ShouldVibrateDuringCasting;
 
-        public List<VibrationPattern> Patterns = new();
+        public bool RisksAcknowledged;
+        public bool OptForNoUsage;
+
+        public IList<VibrationPattern> Patterns = new List<VibrationPattern>();
+
+        public IList<VibrationCooldownTrigger> CooldownTriggers = new List<VibrationCooldownTrigger>();
 
     }
 }

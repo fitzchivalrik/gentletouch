@@ -1,20 +1,18 @@
 ﻿using System;
-using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
-using Dalamud.Configuration;
-using Dalamud.Plugin;
+using System.Text;
 using Dalamud.Game.Command;
 using Dalamud.Game.Internal;
 using Dalamud.Hooking;
+using Dalamud.Plugin;
 using GentleTouch.Caraxi;
 using GentleTouch.Collection;
 using ImGuiNET;
+using Lumina.Excel.GeneratedSheets;
+using Lumina.Text;
 using static System.Int32;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
@@ -23,54 +21,69 @@ namespace GentleTouch
     public class GentleTouch : IDisposable
     {
         private const string Command = "/gentle";
+        private static readonly string[] JobsWhitelist = {
+            "warrior",
+            "paladin",
+            "dark knight",
+            "gunbreaker",
+            "white mage",
+            "scholar",
+            "astrologian",
+            "ninja",
+            "samurai",
+            "dragoon",
+            "monk",
+            "bard",
+            "dancer",
+            "machinist",
+            "black mage",
+            "red mage",
+            "blue mage",
+            "summoner"
+        };
 
         // TODO (Chiv): Check Right and Left Motor for x360/XOne Gamepad
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate void FFXIVSetState(nint maybeControllerStruct, int rightMotorSpeedPercent, int leftMotorSpeedPercent);
+        private delegate void FFXIVSetState(nint maybeControllerStruct, int rightMotorSpeedPercent,
+            int leftMotorSpeedPercent);
+
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int XInputWrapperSetState(int dwUserIndex, ref XInputVibration pVibration);
+
         private delegate int MaybeControllerPoll(nint maybeControllerStruct);
+
         // NOTE (Chiv) modified from
         // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/GameStructs/ActionManager.cs
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
         private delegate ref Cooldown GetActionCooldownSlot(nint actionManager, int cooldownGroup);
-        
+
         private readonly FFXIVSetState _ffxivSetState;
         private readonly XInputWrapperSetState _xInputWrapperSetState;
         private readonly Hook<MaybeControllerPoll> _controllerPoll;
         private readonly nint _actionManager;
         private readonly GetActionCooldownSlot _getActionCooldownSlot;
         private readonly DalamudPluginInterface _pluginInterface;
-        private Configuration _config;
+        private readonly IReadOnlyCollection<ClassJob> _jobs;
+        private readonly IReadOnlyCollection<FFXIVAction> _allActions;
+        private readonly Configuration _config;
 
-        #if DEBUG
+#if DEBUG
         // TODO TESTING
-        
+
         private int _rightMotorSpeed = 100;
-        private int _leftMotorSpeed = 0;
+        private int _leftMotorSpeed;
         private int _dwControllerIndex = 1;
         private int _cooldownGroup = 58;
         private int _nextStep = 0;
         private long _nextTimeStep = 0;
-        private int[] _lastReturnedFromPoll = new int[100];
-        private int _currentIndex = 0;
+        private readonly int[] _lastReturnedFromPoll = new int[100];
+        private int _currentIndex;
 
         private bool reset = false;
-        private VibrationPattern _pattern = new()
-        {
-            Steps = new[]
-            {
-                new VibrationPattern.Step(50, 50, 200),
-                new VibrationPattern.Step(0, 0, 200),
-            },
-            //Cycles = int.MaxValue,
-            Infinite = true,
-            Name = "SimplePattern"
-        };
 
         private readonly List<VibrationCooldownTrigger> _debugTriggers = new();
         private static readonly IComparer<int> Comparer = Comparer<int>.Create((lhs, rhs) => rhs - lhs);
-        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue= new ();
+        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue = new();
 
         private readonly SortedDictionary<int, VibrationCooldownTrigger> _dicQueue = new(Comparer);
 
@@ -78,9 +91,10 @@ namespace GentleTouch
 
         private VibrationCooldownTrigger? _highestPriorityTrigger;
         //TODO END TESTING
-        #endif
+#endif
 
         private nint _maybeControllerStruct;
+
         private bool _shouldDrawConfigUi =
 #if DEBUG
                 true
@@ -95,6 +109,7 @@ namespace GentleTouch
         public GentleTouch(DalamudPluginInterface pi, Configuration config)
         {
             #region Signatures
+
             const string maybeControllerPollSignature =
                 "40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B";
             // TODO (chiv): '??'s at signatures end can be omitted, can't they?
@@ -102,7 +117,7 @@ namespace GentleTouch
                 "40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??";
             const string xInputWrapperSetStateSignature =
                 "48 ff 25 69 28 ce 01 cc cc cc cc cc cc cc cc cc 48 89 5c 24";
-            const string xInputWrapperSetStateSignatureAlternative = 
+            const string xInputWrapperSetStateSignatureAlternative =
                 "48 FF ?? ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89";
             const string ffxivSetStateSignature =
                 "40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9";
@@ -114,34 +129,61 @@ namespace GentleTouch
             //NOTE (Chiv): Signature from :
             // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/GameStructs/ActionManager.cs
             const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
+
             #endregion
             
             // TODO TESTING
             //config.Patterns.RemoveAll(p => true);
             if (config.Patterns.Count == 0)
             {
-             
-                config.Patterns.Add(_pattern);
+                var pattern = new VibrationPattern
+                {
+                    Steps = new[]
+                    {
+                        new VibrationPattern.Step(100, 100, 200),
+                        new VibrationPattern.Step(0, 0, 200)
+                    },
+                    Cycles = 4,
+                    Infinite = false,
+                    Name = "SimplePattern"
+                };
+                var pattern2 = new VibrationPattern
+                {
+                    Steps = new[]
+                    {
+                        new VibrationPattern.Step(50, 50, 200),
+                        new VibrationPattern.Step(0, 0, 200)
+                    },
+                    Infinite = true,
+                    Name = "GCD"
+                };
+                config.Patterns.Add(pattern);
+                config.Patterns.Add(pattern2);
                 pi.SavePluginConfig(config);
             }
 
-            PluginLog.Warning($"{config.Patterns[1].Name}");
-            _debugTriggers.Add(new VibrationCooldownTrigger("GCD", -1, 58, 2, config.Patterns[1]));
-            _debugTriggers.Add(new VibrationCooldownTrigger("Hide", 2245, 6, 1, config.Patterns[0]));
-            _debugTriggers.Add(new VibrationCooldownTrigger("Shade Shift", 2241, 21, 0, config.Patterns[0]));
+            //config.Triggers.Clear();
+            if (config.CooldownTriggers.Count == 0)
+            {
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(30, "Gust Slash", 2242, 58, 2, config.Patterns[1]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(30,"Hide", 2245, 6, 1, config.Patterns[0]));
+                config.CooldownTriggers.Add(
+                    new VibrationCooldownTrigger(30,"Shade Shift", 2241, 21, 0, config.Patterns[0]));
+            }
 
-            _queue.EnqueueRange(_debugTriggers.Select(t => (t, t.Priority)));
-            var first = _queue.Dequeue();
-            var second = _queue.Dequeue();
-            var third = _queue.Dequeue();
-            PluginLog.Log($"Name {first.ActionName}, Prio: {first.Priority}");
-            PluginLog.Log($"Name {second.ActionName}, Prio: {second.Priority}");
-            PluginLog.Log($"Name {third.ActionName}, Prio: {third.Priority}");
-            PluginLog.Log($"Empty? {_queue.Count == 0}");
             // TODO END TESTING
-            
+
             _pluginInterface = pi;
             _config = config;
+            foreach (var trigger in _config.CooldownTriggers)
+                //TODO (Chiv) Error handling if something messed up guids.
+                trigger.Pattern = _config.Patterns.FirstOrDefault(p =>
+                                  {
+                                      PluginLog.Warning($"Trigger GUID: {trigger.PatternGuid}");
+                                      PluginLog.Warning($"Pattern GUID: {p.Guid}");
+                                      return p.Guid == trigger.PatternGuid;
+                                  }) ??
+                                  new VibrationPattern();
             _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
             _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
             _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
@@ -154,14 +196,34 @@ namespace GentleTouch
                 _pluginInterface.TargetModuleScanner.ScanText(xInputWrapperSetStateSignature));
             _controllerPoll = new Hook<MaybeControllerPoll>(
                 _pluginInterface.TargetModuleScanner.ScanText(maybeControllerPollSignature),
-                (MaybeControllerPoll) ControllerPollDetour );
+                (MaybeControllerPoll) ControllerPollDetour);
             _controllerPoll.Enable();
             _actionManager =
                 _pluginInterface.TargetModuleScanner.GetStaticAddressFromSig(actionManagerSignature);
             _getActionCooldownSlot = Marshal.GetDelegateForFunctionPointer<GetActionCooldownSlot>(
                 _pluginInterface.TargetModuleScanner.ScanText(getActionCooldownSlotSignature));
+
             #endregion
             
+            #region Excel Data
+            _jobs = _pluginInterface.Data.Excel.GetSheet<ClassJob>().Where(j => JobsWhitelist.Contains(j.Name))
+                .Append(new ClassJob()
+                {
+                    Name = new SeString(Encoding.UTF8.GetBytes("All")),
+                    NameEnglish = new SeString(Encoding.UTF8.GetBytes("All DoW/DoM")),
+                    RowId = 0
+                })
+                .ToArray();
+            _allActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
+                .Where(a => a.IsPlayerAction && /*a.CooldownGroup != 58 &&*/ !a.IsPvP)
+                .Append(new FFXIVAction
+                {
+                    Name = new SeString(Encoding.UTF8.GetBytes("GCD")),
+                    CooldownGroup = 58,
+                    RowId = 0
+                }).ToArray();
+            #endregion
+
             //TODO TESTING
             pi.CommandManager.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(null!, null!); })
             {
@@ -170,29 +232,31 @@ namespace GentleTouch
             });
             //TODO END TESTING
         }
-        
+
         private void FrameworkInCombatUpdate(Framework framework)
         {
-            void ToOutOfCombatLoop()
+            void InitiateOutOfCombatLoop()
             {
                 ControllerSetState(0, 0);
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
             }
 
-            if (!this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat))
+            if (!_pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? true)
             {
                 _queue.Clear();
                 _highestPriorityTrigger = null;
                 _currentEnumerator?.Dispose();
                 _currentEnumerator = null;
+                InitiateOutOfCombatLoop();
                 return;
             }
-            var weaponOut = _config.OnlyVibrateWithDrawnWeapon && this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.WeaponOut);
+
+            var weaponOut = _config.OnlyVibrateWithDrawnWeapon &&
+                            _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
             if (_config.OnlyVibrateWithDrawnWeapon && !weaponOut)
             {
-                
-                ToOutOfCombatLoop();
+                InitiateOutOfCombatLoop();
                 return;
             }
 
@@ -207,10 +271,7 @@ namespace GentleTouch
             if (_currentEnumerator.MoveNext())
             {
                 var s = _currentEnumerator.Current;
-                if (s is not null)
-                {
-                    ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
-                }
+                if (s is not null) ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
             }
             else
             {
@@ -224,12 +285,10 @@ namespace GentleTouch
         private void UpdateHighestPriorityTrigger()
         {
             if (!_queue.TryPeek(out _, out var priority)) return;
-            PluginLog.Warning($"Heap element Prio: {priority}, currentElementPrio: {_highestPriorityTrigger?.Priority}");
+            PluginLog.Warning(
+                $"Heap element Prio: {priority}, currentElementPrio: {_highestPriorityTrigger?.Priority}");
             if ((_highestPriorityTrigger?.Priority ?? MaxValue) <= priority) return;
-            if (_highestPriorityTrigger?.Pattern.Infinite ?? false)
-            {
-                _highestPriorityTrigger.ShouldBeTriggered = true;
-            }
+            if (_highestPriorityTrigger?.Pattern.Infinite ?? false) _highestPriorityTrigger.ShouldBeTriggered = true;
             _currentEnumerator?.Dispose();
             _highestPriorityTrigger = _queue.Dequeue();
             _currentEnumerator = _highestPriorityTrigger.Pattern.GetEnumerator();
@@ -240,8 +299,11 @@ namespace GentleTouch
 
         private void UpdateQueue()
         {
+            //TODO (Chiv) Proper Switch for trigger types
             var cooldowns =
-                _debugTriggers.Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
+                _config.CooldownTriggers
+                    .Where(t => t.JobId == 0 || t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
+                    .Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
 
 
             var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown)[] ?? cooldowns.ToArray();
@@ -260,35 +322,33 @@ namespace GentleTouch
 
             var filtered = tuples.Where(t => !t.Item2 && t.t.ShouldBeTriggered);
             var valueTuples = filtered as (VibrationCooldownTrigger t, Cooldown)[] ?? filtered.ToArray();
-            foreach (var valueTuple in valueTuples)
-            {
-                valueTuple.t.ShouldBeTriggered = false;
-            }
+            foreach (var valueTuple in valueTuples) valueTuple.t.ShouldBeTriggered = false;
 
             _queue.EnqueueRange(valueTuples.Select(t => (t.t, t.t.Priority)));
         }
 
         private void FrameworkOutOfCombatUpdate(Framework framework)
         {
-            
-            var inCombat = this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat);
+            var inCombat = _pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? false;
             if (!inCombat) return;
-            var weaponOut = _config.OnlyVibrateWithDrawnWeapon && this._pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.WeaponOut);
+            var weaponOut = _config.OnlyVibrateWithDrawnWeapon &&
+                            _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
             if (_config.OnlyVibrateWithDrawnWeapon && !weaponOut) return;
             _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
-
-
         }
-        
-        private void ControllerSetState(int leftMotorPercentage, int rightMotorPercentage, bool direct = true, int dwControllerIndex = 1)
+
+        private void ControllerSetState(int leftMotorPercentage, int rightMotorPercentage, bool direct = false,
+            int dwControllerIndex = 0)
         {
-            #if DEBUG
-            PluginLog.Verbose($"Setting controller state to L: {leftMotorPercentage}, R: {rightMotorPercentage}, direct? {direct}, Index: {dwControllerIndex}");
-            #endif
+#if DEBUG
+            PluginLog.Verbose(
+                $"Setting controller state to L: {leftMotorPercentage}, R: {rightMotorPercentage}, direct? {direct}, Index: {dwControllerIndex}");
+#endif
             if (direct)
             {
-                var t = new XInputVibration((ushort)(leftMotorPercentage * ushort.MaxValue), (ushort)(rightMotorPercentage * ushort.MaxValue));
+                var t = new XInputVibration((ushort) (leftMotorPercentage/100.0 * ushort.MaxValue),
+                    (ushort) (rightMotorPercentage/100.0 * ushort.MaxValue));
                 _xInputWrapperSetState(dwControllerIndex, ref t);
             }
             else
@@ -300,7 +360,7 @@ namespace GentleTouch
         private int ControllerPollDetour(nint maybeControllerStruct)
         {
             _maybeControllerStruct = maybeControllerStruct;
-            #if DEBUG
+#if DEBUG
             var original = _controllerPoll.Original(maybeControllerStruct);
             _lastReturnedFromPoll[_currentIndex++ % _lastReturnedFromPoll.Length] = original;
             // TODO (Chiv) Interpretation happens inside method, log appears after map (0x40 = Square/X)
@@ -311,30 +371,27 @@ namespace GentleTouch
             _controllerPoll.Disable();
             return _controllerPoll.Original(maybeControllerStruct);
 #endif
-
         }
 
         #region UI
 
         private void BuildUi()
         {
-            _shouldDrawConfigUi = _shouldDrawConfigUi &&
-                                  ConfigurationUi.DrawConfigUi(ref _config, _pluginInterface.SavePluginConfig);
             
-            #if DEBUG
+            _shouldDrawConfigUi = _shouldDrawConfigUi &&
+                                  ConfigurationUi.DrawConfigUi(_config, _pluginInterface, _pluginInterface.SavePluginConfig, _jobs, _allActions);
+
+#if DEBUG
             DrawDebugUi();
-            #endif
+#endif
         }
-        #if DEBUG
+#if DEBUG
         private void DrawDebugUi()
         {
             ImGui.Begin($"{Constant.PluginName} Debug");
-            ImGui.Text($"Same Pattern ID? {(_config.Patterns[1] == _debugTriggers[0].Pattern)}");
-            ImGui.Text($"Trigger: {_debugTriggers[0]?.ActionName}");
-            foreach (var step in _debugTriggers[0]?.Pattern?.Steps)
-            {
-                ImGui.Text($"Step L: {step.LeftMotorPercentage} R: {step.RightMotorPercentage} {step.MillisecondsTillNextStep}ms");
-            }
+            foreach (var step in _config.CooldownTriggers[0]?.Pattern?.Steps ?? new VibrationPattern.Step[0 ])
+                ImGui.Text(
+                    $"Step L: {step.LeftMotorPercentage} R: {step.RightMotorPercentage} {step.MillisecondsTillNextStep}ms");
             ImGui.Separator();
             ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
             ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
@@ -343,31 +400,35 @@ namespace GentleTouch
                 ImGui.SameLine();
                 ImGui.Text($"{i:X}");
             }
-            ImGui.Text($"{Marshal.ReadInt32(_maybeControllerStruct,0x88):X}:int (hex) at {nameof(_maybeControllerStruct)}+0x88");
+
+            ImGui.Text(
+                $"{Marshal.ReadInt32(_maybeControllerStruct, 0x88):X}:int (hex) at {nameof(_maybeControllerStruct)}+0x88");
             ImGui.Separator();
-            ImGui.Text("First Pattern Name: "); ImGui.SameLine(); ImGui.Text($"{_config.Patterns[0]?.Name}");
-            
+            ImGui.Text("First Pattern Name: ");
+            ImGui.SameLine();
+            ImGui.Text($"{_config.Patterns[0]?.Name}");
+
             ImGui.Separator();
             ImGui.PushItemWidth(100);
             ImGui.InputInt("RightMotorSpeed", ref _rightMotorSpeed);
-            ImGui.SameLine(); ImGui.InputInt("LeftMotorSpeed", ref _leftMotorSpeed);
+            ImGui.SameLine();
+            ImGui.InputInt("LeftMotorSpeed", ref _leftMotorSpeed);
             ImGui.InputInt("Cooldown Group", ref _cooldownGroup);
-            ImGui.SameLine(); ImGui.InputInt("Controller Index", ref _dwControllerIndex);
-            if (ImGui.Button("FFXIV SetState"))
+            ImGui.SameLine();
+            ImGui.InputInt("Controller Index", ref _dwControllerIndex);
+            if (ImGui.Button("FFXIV SetState")) ControllerSetState((ushort) _leftMotorSpeed, (ushort) _rightMotorSpeed);
+
+            ImGui.SameLine();
+            if (ImGui.Button("XInput Wrapper SetSate"))
+                ControllerSetState((ushort) _leftMotorSpeed, (ushort) _rightMotorSpeed, true);
+            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1, 0, 0, 1));
+            ImGui.SameLine();
+            if (ImGui.Button("Stop Vibration"))
             {
-                ControllerSetState((ushort)_leftMotorSpeed, (ushort)_rightMotorSpeed);
+                ControllerSetState(0, 0, true, 0);
+                ControllerSetState(0, 0);
             }
 
-            ImGui.SameLine(); if (ImGui.Button("XInput Wrapper SetSate"))
-            {
-                ControllerSetState((ushort)_leftMotorSpeed, (ushort)_rightMotorSpeed, true, _dwControllerIndex);
-            }
-            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1,0,0,1));
-            ImGui.SameLine(); if (ImGui.Button("Stop Vibration"))
-            {
-                ControllerSetState(0,0,true,0);
-                ControllerSetState(0,0,true,1);
-            }
             ImGui.PopStyleColor();
             ImGui.Separator();
             ImGui.PopItemWidth();
@@ -379,14 +440,14 @@ namespace GentleTouch
             ImGui.Text($"ActionID: {cooldown.ActionID}");
             ImGui.End();
         }
-        #endif
-        
+#endif
+
 
         private void OnOpenConfigUi(object sender, EventArgs e)
         {
             _shouldDrawConfigUi = !_shouldDrawConfigUi;
         }
-        
+
         #endregion
 
         #region Dispose
@@ -399,21 +460,23 @@ namespace GentleTouch
 
         private void Dispose(bool disposing)
         {
-            PluginLog.Warning($"Disposing: {disposing}");
             if (_isDisposed) return;
             if (disposing)
             {
+                // TODO (Chiv) Still not quite sure about correct dispose
+                // NOTE (Chiv) Explicit, non GC? call - remove managed thingies too.
                 _pluginInterface.UiBuilder.OnOpenConfigUi -= OnOpenConfigUi;
                 _pluginInterface.UiBuilder.OnBuildUi -= BuildUi;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
                 _pluginInterface.CommandManager.RemoveHandler(Command);
                 // TODO TESTING
-                
-                
+
+
                 // TODO TESTING END
             }
 
+            // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.
             if (_controllerPoll.IsEnabled) _controllerPoll.Disable();
             _controllerPoll.Dispose();
 
