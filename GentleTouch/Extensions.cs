@@ -3,11 +3,17 @@ using System.Runtime.InteropServices;
 using Dalamud.Game.ClientState.Actors.Types;
 using Lumina.Excel.GeneratedSheets;
 
-
-//https://github.com/Caraxi/RemindMe/blob/8f8a353f4696d4b64e218964a3ad47841a24a706/Extensions.cs
-namespace GentleTouch.Caraxi {
+/* NOTE (Chiv) From
+ * https://github.com/Caraxi/RemindMe/blob/8f8a353f4696d4b64e218964a3ad47841a24a706/Extensions.cs
+ * under AGLPv3 license
+ * Modifications:
+ * - Changed unsafe code to Marshal calls 
+*/
+namespace GentleTouch
+{
     [Flags]
-    public enum StatusFlags : byte {
+    public enum StatusFlags : byte
+    {
         None = 0,
         Hostile = 1 << 0,
         InCombat = 1 << 1,
@@ -17,17 +23,19 @@ namespace GentleTouch.Caraxi {
         Friend = 1 << 6,
         Casting = 1 << 7
     }
-    public static class Extensions {
 
+    public static class Extensions
+    {
         public static bool IsStatus(this Actor actor, StatusFlags flags)
         {
             var f = Marshal.ReadByte(actor.Address, 0x1980);
-            //var f = *(byte*) (actor.Address + 0x1980);
-            return (f & (byte)flags) > 0;
+            return (f & (byte) flags) > 0;
         }
 
-        public static bool HasClass(this ClassJobCategory cjc, uint classJobRowId) {
-            return classJobRowId switch {
+        public static bool HasClass(this ClassJobCategory cjc, uint classJobRowId)
+        {
+            return classJobRowId switch
+            {
                 0 => cjc.ADV,
                 1 => cjc.GLA,
                 2 => cjc.PGL,
@@ -67,7 +75,7 @@ namespace GentleTouch.Caraxi {
                 36 => cjc.BLU,
                 37 => cjc.GNB,
                 38 => cjc.DNC,
-                _ => false,
+                _ => false
             };
         }
     }

@@ -1,19 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
 using System.Linq;
 using System.Numerics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
 using Dalamud.Configuration;
 using Dalamud.Plugin;
-using GentleTouch.Caraxi;
 using ImGuiNET;
-using Lumina.Excel;
 using Lumina.Excel.GeneratedSheets;
-using Lumina.Text;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 namespace GentleTouch
@@ -28,7 +20,7 @@ namespace GentleTouch
             var changed = false;
             var scale = ImGui.GetIO().FontGlobalScale;
             // TODO (Chiv) Check if size fits
-            ImGui.SetWindowSize(new Vector2(350 *scale, 200 *scale), ImGuiCond.FirstUseEver);
+            ImGui.SetWindowSize(new Vector2(350 * scale, 200 * scale), ImGuiCond.FirstUseEver);
             ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
                 new Vector2(float.MaxValue, float.MaxValue));
             ImGui.Begin($"{Constant.PluginName} Configuration", ref shouldDrawConfigUi, ImGuiWindowFlags.NoCollapse);
@@ -39,10 +31,11 @@ namespace GentleTouch
                 ImGui.End();
                 return shouldDrawConfigUi;
             }
+
             changed |= DrawRisksWarning(config);
             ImGui.BeginTabBar("ConfigurationTabs", ImGuiTabBarFlags.NoTooltip);
             changed |= DrawGeneralTab(config);
-            changed |= DrawPatternTab(config,scale);
+            changed |= DrawPatternTab(config, scale);
             changed |= DrawTriggerTab(config, pi, scale, jobs, allActions);
             ImGui.EndTabBar();
             ImGui.End();
@@ -53,18 +46,20 @@ namespace GentleTouch
 
         private static bool DrawRisksWarning(Configuration config)
         {
-            if(!config.RisksAcknowledged) ImGui.OpenPopup("Risks");
+            if (!config.RisksAcknowledged) ImGui.OpenPopup("Risks");
             ImGui.SetNextWindowSize(new Vector2(750, 225), ImGuiCond.Always);
-            if(!ImGui.BeginPopupModal("Risks")) return false;
+            if (!ImGui.BeginPopupModal("Risks")) return false;
             ImGui.Text("This plugin allows you to directly use the motors of your controller.");
             ImGui.Text("Irresponsible usage has a probability of permanent hardware damage.");
             ImGui.Text("The author cannot be held liable for any damage caused by e.g. vibration overuse.");
-            ImGui.Text("Before using this plugin you have to acknowledge the risks and that you are sole responsible for any damage which might occur.");
+            ImGui.Text(
+                "Before using this plugin you have to acknowledge the risks and that you are sole responsible for any damage which might occur.");
             ImGui.Text("You can cancel and remove the plugin if you do not consent.");
             ImGui.Text("Responsible usage should come with no risks.");
             ImGui.Spacing();
             var changed = false;
-            if (ImGui.Button("I hereby acknowledge the risks and that the author cannot be held liable for damage due to misuse"))
+            if (ImGui.Button(
+                "I hereby acknowledge the risks and that the author cannot be held liable for damage due to misuse"))
             {
                 config.RisksAcknowledged = true;
                 changed = true;
@@ -77,13 +72,10 @@ namespace GentleTouch
                 changed = true;
                 ImGui.CloseCurrentPopup();
             }
+
             ImGui.EndPopup();
             return changed;
         }
-
-        private static int _currentSelectedAction = 0;
-        private static int _currentSelectedJob = 0;
-        private static int _currentSelectedPattern = 0;
 
         private static bool DrawTriggerTab(Configuration config, DalamudPluginInterface pi, float scale,
             IReadOnlyCollection<ClassJob> jobs, IReadOnlyCollection<FFXIVAction> allActions)
@@ -92,14 +84,15 @@ namespace GentleTouch
             var changed = false;
             if (ImGui.TreeNode("Cooldown Triggers (work only in combat)"))
             {
-                if(ImGui.Button("Add##Trigger"))
+                if (ImGui.Button("Add##Trigger"))
                 {
                     var lastTrigger = config.CooldownTriggers.Last();
                     config.CooldownTriggers.Add(
                         new VibrationCooldownTrigger(
-                            0, "GCD", 0, 58, lastTrigger.Priority+1,config.Patterns[0]));
+                            0, "GCD", 0, 58, lastTrigger.Priority + 1, config.Patterns[0]));
                     changed = true;
                 }
+
                 ImGui.SameLine();
                 ImGui.AlignTextToFramePadding();
                 ImGui.Text("Ordered by priority. Drag and Drop on ':::' to swap");
@@ -108,54 +101,59 @@ namespace GentleTouch
                 foreach (var trigger in config.CooldownTriggers)
                 {
                     ImGui.PushID(trigger.Priority);
-                    
+
                     //ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
                     ImGui.Button(":::");
-                    if (ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoHoldToOpenOthers | ImGuiDragDropFlags.SourceNoPreviewTooltip))
+                    if (ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoHoldToOpenOthers |
+                                                  ImGuiDragDropFlags.SourceNoPreviewTooltip))
                     {
                         unsafe
                         {
                             var prio = trigger.Priority;
                             var ptr = new IntPtr(&prio);
                             // TODO (chiv) const string
-                            ImGui.SetDragDropPayload("PRIORITY_PAYLOAD",ptr , sizeof(int));
+                            ImGui.SetDragDropPayload("PRIORITY_PAYLOAD", ptr, sizeof(int));
                         }
                         //ImGui.SameLine();
-                        #if DEBUG
+#if DEBUG
                         //ImGui.Text($"Dragging {trigger.ActionName} with prio {trigger.Priority}");
-                        #else
+#else
                         //ImGui.Text($"Dragging {trigger.ActionName}");
-                        #endif
+#endif
                         ImGui.EndDragDropSource();
                     }
+
                     if (ImGui.BeginDragDropTarget())
                     {
-                        var imGuiPayloadPtr = ImGui.AcceptDragDropPayload("PRIORITY_PAYLOAD", ImGuiDragDropFlags.AcceptBeforeDelivery | ImGuiDragDropFlags.AcceptNoPreviewTooltip | ImGuiDragDropFlags.AcceptNoDrawDefaultRect);
+                        var imGuiPayloadPtr = ImGui.AcceptDragDropPayload("PRIORITY_PAYLOAD",
+                            ImGuiDragDropFlags.AcceptBeforeDelivery | ImGuiDragDropFlags.AcceptNoPreviewTooltip |
+                            ImGuiDragDropFlags.AcceptNoDrawDefaultRect);
                         unsafe
                         {
                             if (imGuiPayloadPtr.NativePtr is not null)
                             {
-                                var prio = *(int*)imGuiPayloadPtr.Data;
+                                var prio = *(int*) imGuiPayloadPtr.Data;
                                 toSwap[0] = prio;
                                 toSwap[1] = trigger.Priority;
                             }
                         }
                         //ImGui.SameLine();
-                        #if DEBUG
+#if DEBUG
                         //ImGui.Text($"Swap {trigger.ActionName} with prio {trigger.Priority}");
-                        #else
+#else
                         //ImGui.Text($"Swap with {trigger.ActionName}");
-                        #endif
+#endif
                         ImGui.EndDragDropTarget();
                     }
+
                     //ImGui.PopStyleColor();
                     ImGui.SameLine();
-                    ImGui.Text($"{trigger.Priority+1}");                    
-                    #if DEBUG
+                    ImGui.Text($"{trigger.Priority + 1}");
+#if DEBUG
                     ImGui.SameLine();
                     ImGui.AlignTextToFramePadding();
                     ImGui.Text($"A:{trigger.ActionId} J:{trigger.JobId}");
-                    #endif
+#endif
                     ImGui.SetNextItemWidth(100);
                     ImGui.SameLine();
                     changed |= DrawJobCombo(jobs, trigger);
@@ -166,10 +164,7 @@ namespace GentleTouch
                     changed |= DrawPatternCombo(config, trigger);
                     ImGui.PopItemWidth();
                     ImGui.SameLine();
-                    if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale)))
-                    {
-                        ImGui.OpenPopup("Sure?");
-                    }
+                    if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?");
 
                     if (ImGui.IsItemHovered())
                     {
@@ -190,6 +185,7 @@ namespace GentleTouch
 
                         ImGui.EndPopup();
                     }
+
                     ImGui.PopID();
                 }
 
@@ -204,19 +200,15 @@ namespace GentleTouch
                     changed = true;
                 }
 
-                foreach (var trigger in toRemoveTrigger)
-                {
-                    config.CooldownTriggers.Remove(trigger);
-                }
+                foreach (var trigger in toRemoveTrigger) config.CooldownTriggers.Remove(trigger);
 
-                if(toRemoveTrigger.Count > 0)
+                if (toRemoveTrigger.Count > 0)
                     for (var i = 0; i < config.CooldownTriggers.Count; i++)
-                    {
                         config.CooldownTriggers[i].Priority = i;
-                    }
                 ImGui.Spacing();
                 ImGui.TreePop();
             }
+
             ImGui.EndTabItem();
             return changed;
         }
@@ -235,29 +227,29 @@ namespace GentleTouch
                     changed = true;
                 }
 
-                if (isSelected)
-                {
-                    ImGui.SetItemDefaultFocus();
-                }
+                if (isSelected) ImGui.SetItemDefaultFocus();
             }
+
             ImGui.EndCombo();
             return changed;
         }
 
-        private static bool DrawActionCombo(DalamudPluginInterface pi,IReadOnlyCollection<FFXIVAction> allActions, Configuration config, VibrationCooldownTrigger trigger)
+        private static bool DrawActionCombo(DalamudPluginInterface pi, IReadOnlyCollection<FFXIVAction> allActions,
+            Configuration config, VibrationCooldownTrigger trigger)
         {
             var changed = false;
-            var actionsCollection = trigger.JobId == 0 
-                ? allActions.Where(a => a.RowId == 0) 
+            var actionsCollection = trigger.JobId == 0
+                ? allActions.Where(a => a.RowId == 0)
                 : allActions.Where(a => a.RowId != 0 && a.ClassJobCategory.Value.HasClass((uint) trigger.JobId));
             var actions = actionsCollection as FFXIVAction[] ?? actionsCollection.ToArray();
             if (!actions.Select(a => a.RowId).Contains((uint) trigger.ActionId))
             {
-                trigger.ActionId = (int)actions[0].RowId;
+                trigger.ActionId = (int) actions[0].RowId;
                 trigger.ActionName = actions[0].Name;
                 trigger.ActionCooldownGroup = actions[0].CooldownGroup;
                 changed = true;
             }
+
             if (!ImGui.BeginCombo($"##Action{trigger.Priority}", trigger.ActionName)) return changed;
             {
                 foreach (var a in actions)
@@ -265,16 +257,13 @@ namespace GentleTouch
                     var isSelected = a.RowId == trigger.ActionId;
                     if (ImGui.Selectable(a.Name, isSelected))
                     {
-                        trigger.ActionId = (int)a.RowId;
+                        trigger.ActionId = (int) a.RowId;
                         trigger.ActionName = a.Name;
                         trigger.ActionCooldownGroup = a.CooldownGroup;
                         changed = true;
                     }
 
-                    if (isSelected)
-                    {
-                        ImGui.SetItemDefaultFocus();
-                    }
+                    if (isSelected) ImGui.SetItemDefaultFocus();
                 }
 
                 ImGui.EndCombo();
@@ -285,22 +274,21 @@ namespace GentleTouch
 
         private static bool DrawJobCombo(IReadOnlyCollection<ClassJob> jobs, VibrationCooldownTrigger trigger)
         {
-            if (!ImGui.BeginCombo($"##Jobs{trigger.Priority}", jobs.Single(j => j.RowId == trigger.JobId).NameEnglish)) return false;
+            if (!ImGui.BeginCombo($"##Jobs{trigger.Priority}",
+                jobs.Single(j => j.RowId == trigger.JobId).NameEnglish)) return false;
             var changed = false;
             foreach (var job in jobs)
             {
                 var isSelected = job.RowId == trigger.JobId;
                 if (ImGui.Selectable(job.NameEnglish, isSelected))
                 {
-                    trigger.JobId = (int)job.RowId;
+                    trigger.JobId = (int) job.RowId;
                     changed = true;
                 }
 
-                if (isSelected)
-                {
-                    ImGui.SetItemDefaultFocus();
-                }
+                if (isSelected) ImGui.SetItemDefaultFocus();
             }
+
             ImGui.EndCombo();
             return changed;
         }
@@ -319,10 +307,7 @@ namespace GentleTouch
             foreach (var pattern in config.Patterns)
             {
                 ImGui.PushID(pattern.Guid.GetHashCode());
-                if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale)))
-                {
-                    ImGui.OpenPopup("Sure?");
-                }
+                if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?");
 
                 if (ImGui.IsItemHovered())
                 {
@@ -349,10 +334,7 @@ namespace GentleTouch
                 {
 #if DEBUG
                     ImGui.Text($"UUID: {pattern.Guid}");
-                    if (ImGui.IsItemClicked(1))
-                    {
-                        ImGui.SetClipboardText(pattern.Guid.ToString());
-                    }
+                    if (ImGui.IsItemClicked(1)) ImGui.SetClipboardText(pattern.Guid.ToString());
 
                     if (ImGui.IsItemHovered())
                     {
@@ -360,7 +342,7 @@ namespace GentleTouch
                         //ImGui.SetNextWindowSize(new Vector2(s.X/2, -1));
                         //ImGui.SetNextWindowContentSize();
                         ImGui.BeginTooltip();
-                        ImGui.Text($"Right-Click to copy UUID to clipboard.");
+                        ImGui.Text("Right-Click to copy UUID to clipboard.");
                         ImGui.EndTooltip();
                     }
 #endif
@@ -368,7 +350,7 @@ namespace GentleTouch
                     if (ImGui.InputTextWithHint("Pattern Name", "Name of Pattern", ref pattern.Name, 32))
                         changed = true;
                     ImGui.SetNextItemWidth(75);
-                    if (ImGui.InputInt($"Cycles", ref pattern.Cycles, 1)) changed = true;
+                    if (ImGui.InputInt("Cycles", ref pattern.Cycles, 1)) changed = true;
                     ImGui.SameLine();
                     if (ImGui.Checkbox("Infinite", ref pattern.Infinite)) changed = true;
                     var toRemoveSteps = new List<int>();
@@ -382,10 +364,7 @@ namespace GentleTouch
                     for (var i = 0; i < pattern.Steps.Count; i++)
                     {
                         ImGui.PushID(i);
-                        if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale)))
-                        {
-                            ImGui.OpenPopup("Sure?");
-                        }
+                        if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?");
 
                         if (ImGui.IsItemHovered())
                         {
@@ -435,7 +414,7 @@ namespace GentleTouch
 
                             ImGui.SameLine();
                             var centisecondsTillNextStep = s.MillisecondsTillNextStep / 10;
-                            if (ImGui.InputInt($"##Centiseconds till next step", ref centisecondsTillNextStep, 1))
+                            if (ImGui.InputInt("##Centiseconds till next step", ref centisecondsTillNextStep, 1))
                             {
                                 s.MillisecondsTillNextStep = centisecondsTillNextStep * 10;
                                 changed = true;
@@ -451,10 +430,7 @@ namespace GentleTouch
                             ImGui.PopItemWidth();
 
                             ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(4, 4));
-                            if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale)))
-                            {
-                                ImGui.OpenPopup("Sure?2");
-                            }
+                            if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?2");
 
                             if (ImGui.IsItemHovered())
                             {
@@ -478,7 +454,7 @@ namespace GentleTouch
 
                             ImGui.SameLine();
                             ImGui.SetNextItemWidth(32 * scale);
-                            if (ImGui.InputInt($"##centi", ref centisecondsTillNextStep, 0))
+                            if (ImGui.InputInt("##centi", ref centisecondsTillNextStep, 0))
                             {
                                 s.MillisecondsTillNextStep = centisecondsTillNextStep * 10;
                                 changed = true;
@@ -526,10 +502,7 @@ namespace GentleTouch
                     }
 
                     //ImGui.EndGroup();
-                    foreach (var i in toRemoveSteps)
-                    {
-                        pattern.Steps.RemoveAt(i);
-                    }
+                    foreach (var i in toRemoveSteps) pattern.Steps.RemoveAt(i);
 
                     ImGui.TreePop();
                 }
@@ -537,10 +510,7 @@ namespace GentleTouch
                 ImGui.PopID();
             }
 
-            foreach (var pattern in toRemovePatterns)
-            {
-                config.Patterns.Remove(pattern);
-            }
+            foreach (var pattern in toRemovePatterns) config.Patterns.Remove(pattern);
             ImGui.EndTabItem();
             return changed;
         }
@@ -549,8 +519,8 @@ namespace GentleTouch
         {
             if (!ImGui.BeginTabItem("General")) return false;
             var changed = ImGui.Checkbox(nameof(config.ShouldVibrateDuringPvP), ref config.ShouldVibrateDuringPvP);
-            changed |= ImGui.Checkbox(nameof(config.ShouldVibrateDuringCasting), ref config.ShouldVibrateDuringCasting);
-            changed |= ImGui.Checkbox(nameof(config.OnlyVibrateWithDrawnWeapon), ref config.OnlyVibrateWithDrawnWeapon);
+            changed |= ImGui.Checkbox(nameof(config.NoVibrationDuringCasting), ref config.NoVibrationDuringCasting);
+            changed |= ImGui.Checkbox(nameof(config.NoVibrationWithSheathedWeapon), ref config.NoVibrationWithSheathedWeapon);
             ImGui.EndTabItem();
             return changed;
         }

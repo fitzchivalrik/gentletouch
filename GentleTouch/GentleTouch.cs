@@ -4,16 +4,15 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Dalamud.Game.ClientState;
 using Dalamud.Game.Command;
 using Dalamud.Game.Internal;
 using Dalamud.Hooking;
 using Dalamud.Plugin;
-using GentleTouch.Caraxi;
 using GentleTouch.Collection;
 using ImGuiNET;
 using Lumina.Excel.GeneratedSheets;
 using Lumina.Text;
-using static System.Int32;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 namespace GentleTouch
@@ -21,7 +20,9 @@ namespace GentleTouch
     public class GentleTouch : IDisposable
     {
         private const string Command = "/gentle";
-        private static readonly string[] JobsWhitelist = {
+
+        private static readonly string[] JobsWhitelist =
+        {
             "warrior",
             "paladin",
             "dark knight",
@@ -65,31 +66,20 @@ namespace GentleTouch
         private readonly DalamudPluginInterface _pluginInterface;
         private readonly IReadOnlyCollection<ClassJob> _jobs;
         private readonly IReadOnlyCollection<FFXIVAction> _allActions;
+        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue = new();
+        private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
+        private VibrationTrigger? _highestPriorityTrigger;
         private readonly Configuration _config;
 
 #if DEBUG
-        // TODO TESTING
-
         private int _rightMotorSpeed = 100;
         private int _leftMotorSpeed;
         private int _dwControllerIndex = 1;
         private int _cooldownGroup = 58;
-        private int _nextStep = 0;
-        private long _nextTimeStep = 0;
         private readonly int[] _lastReturnedFromPoll = new int[100];
         private int _currentIndex;
 
-        private bool reset = false;
 
-        private readonly List<VibrationCooldownTrigger> _debugTriggers = new();
-        private static readonly IComparer<int> Comparer = Comparer<int>.Create((lhs, rhs) => rhs - lhs);
-        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue = new();
-
-        private readonly SortedDictionary<int, VibrationCooldownTrigger> _dicQueue = new(Comparer);
-
-        private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
-
-        private VibrationCooldownTrigger? _highestPriorityTrigger;
         //TODO END TESTING
 #endif
 
@@ -110,19 +100,20 @@ namespace GentleTouch
         {
             #region Signatures
 
+            // NOTE (Chiv): Different signatures from different methods
             const string maybeControllerPollSignature =
                 "40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B";
             // TODO (chiv): '??'s at signatures end can be omitted, can't they?
-            const string maybeControllerPollSignatureAlternative =
-                "40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??";
+            //const string maybeControllerPollSignatureAlternative =
+            //    "40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??";
             const string xInputWrapperSetStateSignature =
                 "48 ff 25 69 28 ce 01 cc cc cc cc cc cc cc cc cc 48 89 5c 24";
-            const string xInputWrapperSetStateSignatureAlternative =
-                "48 FF ?? ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89";
+            //const string xInputWrapperSetStateSignatureAlternative =
+            //    "48 FF ?? ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89";
             const string ffxivSetStateSignature =
                 "40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9";
-            const string ffxivSetStateSignatureAlternative =
-                "40 ?? 53 56 48 8B ?? 48 81 EC";
+            //const string ffxivSetStateSignatureAlternative =
+            //    "40 ?? 53 56 48 8B ?? 48 81 EC";
             //NOTE (Chiv): Signature from :
             // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/Helper/Common.cs
             const string actionManagerSignature = "E8 ?? ?? ?? ?? 33 C0 E9 ?? ?? ?? ?? 8B 7D 0C";
@@ -131,9 +122,8 @@ namespace GentleTouch
             const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
 
             #endregion
-            
-            // TODO TESTING
-            //config.Patterns.RemoveAll(p => true);
+
+            // TODO TESTING Move that to Configuration initializer...or?
             if (config.Patterns.Count == 0)
             {
                 var pattern = new VibrationPattern
@@ -143,46 +133,67 @@ namespace GentleTouch
                         new VibrationPattern.Step(100, 100, 200),
                         new VibrationPattern.Step(0, 0, 200)
                     },
-                    Cycles = 4,
+                    Cycles = 2,
                     Infinite = false,
-                    Name = "SimplePattern"
+                    Name = "Both Strong"
                 };
                 var pattern2 = new VibrationPattern
                 {
                     Steps = new[]
                     {
-                        new VibrationPattern.Step(50, 50, 200),
-                        new VibrationPattern.Step(0, 0, 200)
+                        new VibrationPattern.Step(25, 25, 200),
+                        new VibrationPattern.Step(0, 0, 500)
                     },
                     Infinite = true,
-                    Name = "GCD"
+                    Name = "GCD (Slow pulse)"
+                };
+                var pattern3 = new VibrationPattern
+                {
+                    Steps = new[]
+                    {
+                        new VibrationPattern.Step(100, 0, 100),
+                    },
+                    Infinite = false,
+                    Cycles = 1,
+                    Name = "Left Strong"
+                };
+                var pattern4 = new VibrationPattern
+                {
+                    Steps = new[]
+                    {
+                        new VibrationPattern.Step(0, 100, 100),
+                    },
+                    Infinite = false,
+                    Cycles = 1,
+                    Name = "Right Strong"
                 };
                 config.Patterns.Add(pattern);
                 config.Patterns.Add(pattern2);
+                config.Patterns.Add(pattern3);
+                config.Patterns.Add(pattern4);
                 pi.SavePluginConfig(config);
             }
 
-            //config.Triggers.Clear();
             if (config.CooldownTriggers.Count == 0)
             {
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(30, "Gust Slash", 2242, 58, 2, config.Patterns[1]));
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(30,"Hide", 2245, 6, 1, config.Patterns[0]));
+                //TODO (Chiv) Add another default for another job
                 config.CooldownTriggers.Add(
-                    new VibrationCooldownTrigger(30,"Shade Shift", 2241, 21, 0, config.Patterns[0]));
+                    new VibrationCooldownTrigger(30, "Shade Shift", 2241, 21, 0, config.Patterns[0]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(30, "Hide", 2245, 6, 1, config.Patterns[2]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(0, "GCD", 0, 58, 2,
+                    config.Patterns[1]));
+                pi.SavePluginConfig(config);
             }
 
             // TODO END TESTING
 
             _pluginInterface = pi;
             _config = config;
+            // NOTE (Chiv) Resolve pattern GUIDs to pattern
+            // TODO (Chiv) Better in custom Serializer?
             foreach (var trigger in _config.CooldownTriggers)
                 //TODO (Chiv) Error handling if something messed up guids.
-                trigger.Pattern = _config.Patterns.FirstOrDefault(p =>
-                                  {
-                                      PluginLog.Warning($"Trigger GUID: {trigger.PatternGuid}");
-                                      PluginLog.Warning($"Pattern GUID: {p.Guid}");
-                                      return p.Guid == trigger.PatternGuid;
-                                  }) ??
+                trigger.Pattern = _config.Patterns.FirstOrDefault(p => p.Guid == trigger.PatternGuid) ??
                                   new VibrationPattern();
             _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
             _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
@@ -204,24 +215,26 @@ namespace GentleTouch
                 _pluginInterface.TargetModuleScanner.ScanText(getActionCooldownSlotSignature));
 
             #endregion
-            
+
             #region Excel Data
+
             _jobs = _pluginInterface.Data.Excel.GetSheet<ClassJob>().Where(j => JobsWhitelist.Contains(j.Name))
-                .Append(new ClassJob()
+                .Append(new ClassJob
                 {
                     Name = new SeString(Encoding.UTF8.GetBytes("All")),
-                    NameEnglish = new SeString(Encoding.UTF8.GetBytes("All DoW/DoM")),
+                    NameEnglish = new SeString(Encoding.UTF8.GetBytes("All Jobs")),
                     RowId = 0
                 })
                 .ToArray();
             _allActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
-                .Where(a => a.IsPlayerAction && /*a.CooldownGroup != 58 &&*/ !a.IsPvP)
+                .Where(a => a.IsPlayerAction && a.CooldownGroup != 58 && !a.IsPvP)
                 .Append(new FFXIVAction
                 {
                     Name = new SeString(Encoding.UTF8.GetBytes("GCD")),
                     CooldownGroup = 58,
                     RowId = 0
                 }).ToArray();
+
             #endregion
 
             //TODO TESTING
@@ -242,7 +255,8 @@ namespace GentleTouch
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
             }
 
-            if (!_pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? true)
+            if ((!_pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? true)
+                || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious])
             {
                 _queue.Clear();
                 _highestPriorityTrigger = null;
@@ -252,14 +266,21 @@ namespace GentleTouch
                 return;
             }
 
-            var weaponOut = _config.OnlyVibrateWithDrawnWeapon &&
-                            _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
-            if (_config.OnlyVibrateWithDrawnWeapon && !weaponOut)
+            var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
+                            !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+            if (weaponSheathed)
             {
                 InitiateOutOfCombatLoop();
                 return;
             }
-
+            var casting = _config.NoVibrationDuringCasting &&
+                          _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
+            if (casting)
+            {
+                InitiateOutOfCombatLoop();
+                return;
+            }
+            
             UpdateQueue();
             UpdateHighestPriorityTrigger();
             CheckAndVibrate();
@@ -285,16 +306,12 @@ namespace GentleTouch
         private void UpdateHighestPriorityTrigger()
         {
             if (!_queue.TryPeek(out _, out var priority)) return;
-            PluginLog.Warning(
-                $"Heap element Prio: {priority}, currentElementPrio: {_highestPriorityTrigger?.Priority}");
-            if ((_highestPriorityTrigger?.Priority ?? MaxValue) <= priority) return;
+            if ((_highestPriorityTrigger?.Priority ?? int.MaxValue) <= priority) return;
             if (_highestPriorityTrigger?.Pattern.Infinite ?? false) _highestPriorityTrigger.ShouldBeTriggered = true;
             _currentEnumerator?.Dispose();
             _highestPriorityTrigger = _queue.Dequeue();
             _currentEnumerator = _highestPriorityTrigger.Pattern.GetEnumerator();
-            PluginLog.Warning($"{(_currentEnumerator is null ? "Enumerator is null!" : "Enumereator not null")}");
             ControllerSetState(0, 0);
-            PluginLog.Warning($"Set Current to {_highestPriorityTrigger.ActionName}");
         }
 
         private void UpdateQueue()
@@ -304,10 +321,9 @@ namespace GentleTouch
                 _config.CooldownTriggers
                     .Where(t => t.JobId == 0 || t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
                     .Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
-
-
-            var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown)[] ?? cooldowns.ToArray();
-            foreach (var (t, _) in tuples.Where(t => t.Item2))
+            
+            var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown c)[] ?? cooldowns.ToArray();
+            foreach (var (t, _) in tuples.Where(it => it.c))
             {
                 if (_highestPriorityTrigger == t)
                 {
@@ -316,24 +332,25 @@ namespace GentleTouch
                     _highestPriorityTrigger = null;
                     ControllerSetState(0, 0);
                 }
-
                 t.ShouldBeTriggered = true;
             }
 
-            var filtered = tuples.Where(t => !t.Item2 && t.t.ShouldBeTriggered);
-            var valueTuples = filtered as (VibrationCooldownTrigger t, Cooldown)[] ?? filtered.ToArray();
-            foreach (var valueTuple in valueTuples) valueTuple.t.ShouldBeTriggered = false;
-
-            _queue.EnqueueRange(valueTuples.Select(t => (t.t, t.t.Priority)));
+            var triggeredTriggers = tuples.Where(it => !it.c && it.t.ShouldBeTriggered).Select(it => it.t);
+            var triggers = triggeredTriggers as VibrationCooldownTrigger[] ?? triggeredTriggers.ToArray();
+            foreach (var trigger in triggers) trigger.ShouldBeTriggered = false;
+            _queue.EnqueueRange(triggers.Select(t => (t, t.Priority)));
         }
 
         private void FrameworkOutOfCombatUpdate(Framework framework)
         {
             var inCombat = _pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? false;
             if (!inCombat) return;
-            var weaponOut = _config.OnlyVibrateWithDrawnWeapon &&
-                            _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
-            if (_config.OnlyVibrateWithDrawnWeapon && !weaponOut) return;
+            var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
+                            !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+            if (weaponSheathed) return;
+            var casting = _config.NoVibrationDuringCasting &&
+                          _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
+            if (casting) return;
             _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
         }
@@ -344,14 +361,15 @@ namespace GentleTouch
 #if DEBUG
             PluginLog.Verbose(
                 $"Setting controller state to L: {leftMotorPercentage}, R: {rightMotorPercentage}, direct? {direct}, Index: {dwControllerIndex}");
-#endif
+
             if (direct)
             {
-                var t = new XInputVibration((ushort) (leftMotorPercentage/100.0 * ushort.MaxValue),
-                    (ushort) (rightMotorPercentage/100.0 * ushort.MaxValue));
+                var t = new XInputVibration((ushort) (leftMotorPercentage / 100.0 * ushort.MaxValue),
+                    (ushort) (rightMotorPercentage / 100.0 * ushort.MaxValue));
                 _xInputWrapperSetState(dwControllerIndex, ref t);
             }
             else
+#endif
             {
                 _ffxivSetState(_maybeControllerStruct, rightMotorPercentage, leftMotorPercentage);
             }
@@ -377,9 +395,9 @@ namespace GentleTouch
 
         private void BuildUi()
         {
-            
             _shouldDrawConfigUi = _shouldDrawConfigUi &&
-                                  ConfigurationUi.DrawConfigUi(_config, _pluginInterface, _pluginInterface.SavePluginConfig, _jobs, _allActions);
+                                  ConfigurationUi.DrawConfigUi(_config, _pluginInterface,
+                                      _pluginInterface.SavePluginConfig, _jobs, _allActions);
 
 #if DEBUG
             DrawDebugUi();
@@ -389,10 +407,6 @@ namespace GentleTouch
         private void DrawDebugUi()
         {
             ImGui.Begin($"{Constant.PluginName} Debug");
-            foreach (var step in _config.CooldownTriggers[0]?.Pattern?.Steps ?? new VibrationPattern.Step[0 ])
-                ImGui.Text(
-                    $"Step L: {step.LeftMotorPercentage} R: {step.RightMotorPercentage} {step.MillisecondsTillNextStep}ms");
-            ImGui.Separator();
             ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
             ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
             foreach (var i in _lastReturnedFromPoll)
@@ -403,10 +417,6 @@ namespace GentleTouch
 
             ImGui.Text(
                 $"{Marshal.ReadInt32(_maybeControllerStruct, 0x88):X}:int (hex) at {nameof(_maybeControllerStruct)}+0x88");
-            ImGui.Separator();
-            ImGui.Text("First Pattern Name: ");
-            ImGui.SameLine();
-            ImGui.Text($"{_config.Patterns[0]?.Name}");
 
             ImGui.Separator();
             ImGui.PushItemWidth(100);
@@ -425,7 +435,7 @@ namespace GentleTouch
             ImGui.SameLine();
             if (ImGui.Button("Stop Vibration"))
             {
-                ControllerSetState(0, 0, true, 0);
+                ControllerSetState(0, 0, true);
                 ControllerSetState(0, 0);
             }
 

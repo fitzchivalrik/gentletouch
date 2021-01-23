@@ -1,54 +1,62 @@
-﻿// NOTE (CHIV): https://github.com/pgolebiowski/dotnet-runtime-fork/blob/master/src/libraries/System.Collections/src/System/Collections/Generic/PriorityQueue.cs
-// Modifications: Removed internal only stuff and changed namespace
-// Licensed to the .NET Foundation under one or more agreements.
-// The .NET Foundation licenses this file to you under the MIT license.
+﻿// From:
+// https://github.com/pgolebiowski/dotnet-runtime-fork/blob/07ec07ce05f351e4dc6b3260113e2c169f22109a/src/libraries/System.Collections/src/System/Collections/Generic/PriorityQueue.cs
+// Modifications: Removed internal only stuff and changed namespace, removed [MaybeWhenNull] attribute
+
 #pragma warning disable CS8601
 // ReSharper disable All
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace GentleTouch.Collection
 {
     /// <summary>
-    /// Represents a data structure in which each element additionally has a priority
-    /// associated with it.
+    ///     Represents a data structure in which each element additionally has a priority
+    ///     associated with it.
     /// </summary>
     /// <typeparam name="TElement">The type of the element.</typeparam>
     /// <typeparam name="TPriority">The type of the priority.</typeparam>
     public class PriorityQueue<TElement, TPriority>
     {
-        /// <summary>
-        /// Represents an implicit heap-ordered complete d-ary tree, stored as an array.
-        /// </summary>
-        private (TElement element, TPriority priority)[] _nodes;
-
-        private UnorderedItemsCollection? _unorderedItems;
-
-        /// <summary>
-        /// The number of nodes in the heap.
-        /// </summary>
-        private int _size;
-
-        /// <summary>
-        /// Used to keep enumerator in sync with the collection.
-        /// </summary>
-        private int _version;
-
-        private const int MinimumGrow = 4;
-        private const int GrowFactor = 200; // double each time
+        private const int MinimumElementsToGrowBy = 4;
 
         private const int RootIndex = 0;
 
         /// <summary>
-        /// Specifies the arity of the d-ary heap, which here is quaternary.
+        ///     Specifies the arity of the d-ary heap, which here is quaternary.
         /// </summary>
-        private const uint Arity = 4;
+        private const int Arity = 4;
 
         /// <summary>
-        /// Creates an empty priority queue.
+        ///     The binary logarithm of <see cref="Arity" />.
+        /// </summary>
+        private const int ArityLog2 = 2;
+
+        /// <summary>
+        ///     Represents an implicit heap-ordered complete d-ary tree, stored as an array.
+        /// </summary>
+        private (TElement Element, TPriority Priority)[] _nodes;
+
+        /// <summary>
+        ///     The number of nodes in the heap.
+        /// </summary>
+        private int _size;
+
+        private UnorderedItemsCollection? _unorderedItems;
+
+        /// <summary>
+        ///     Used to keep enumerator in sync with the collection.
+        /// </summary>
+        private int _version;
+
+        /// <summary>
+        ///     Creates an empty priority queue.
         /// </summary>
         public PriorityQueue()
             : this(initialCapacity: 0, comparer: null)
@@ -56,7 +64,7 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Creates an empty priority queue with the specified initial capacity for its underlying array.
+        ///     Creates an empty priority queue with the specified initial capacity for its underlying array.
         /// </summary>
         public PriorityQueue(int initialCapacity)
             : this(initialCapacity, comparer: null)
@@ -64,7 +72,7 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Creates an empty priority queue with the specified priority comparer.
+        ///     Creates an empty priority queue with the specified priority comparer.
         /// </summary>
         public PriorityQueue(IComparer<TPriority>? comparer)
             : this(initialCapacity: 0, comparer)
@@ -72,8 +80,8 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Creates an empty priority queue with the specified priority comparer and
-        /// the specified initial capacity for its underlying array.
+        ///     Creates an empty priority queue with the specified priority comparer and
+        ///     the specified initial capacity for its underlying array.
         /// </summary>
         public PriorityQueue(int initialCapacity, IComparer<TPriority>? comparer)
         {
@@ -87,11 +95,11 @@ namespace GentleTouch.Collection
                 ? Array.Empty<(TElement, TPriority)>()
                 : new (TElement, TPriority)[initialCapacity];
 
-            this.Comparer = comparer ?? Comparer<TPriority>.Default;
+            Comparer = comparer ?? Comparer<TPriority>.Default;
         }
 
         /// <summary>
-        /// Creates a priority queue populated with the specified elements and priorities.
+        ///     Creates a priority queue populated with the specified elements and priorities.
         /// </summary>
         public PriorityQueue(IEnumerable<(TElement element, TPriority priority)> items)
             : this(items, comparer: null)
@@ -99,8 +107,8 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Creates a priority queue populated with the specified elements and priorities,
-        /// and with the specified priority comparer.
+        ///     Creates a priority queue populated with the specified elements and priorities,
+        ///     and with the specified priority comparer.
         /// </summary>
         public PriorityQueue(IEnumerable<(TElement element, TPriority priority)> items, IComparer<TPriority>? comparer)
         {
@@ -110,7 +118,7 @@ namespace GentleTouch.Collection
             }
 
             _nodes = EnumerableHelpers.ToArray(items, out _size);
-            this.Comparer = comparer ?? Comparer<TPriority>.Default;
+            Comparer = comparer ?? Comparer<TPriority>.Default;
 
             if (_size > 1)
             {
@@ -119,30 +127,31 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Gets the current amount of items in the priority queue.
+        ///     Gets the current amount of items in the priority queue.
         /// </summary>
         public int Count => _size;
 
         /// <summary>
-        /// Gets the priority comparer of the priority queue.
+        ///     Gets the priority comparer of the priority queue.
         /// </summary>
         public IComparer<TPriority> Comparer { get; }
 
         /// <summary>
-        /// Gets a collection that enumerates the elements of the queue.
+        ///     Gets a collection that enumerates the elements of the queue.
         /// </summary>
         public UnorderedItemsCollection UnorderedItems => _unorderedItems ??= new UnorderedItemsCollection(this);
 
         /// <summary>
-        /// Enqueues the specified element and associates it with the specified priority.
+        ///     Enqueues the specified element and associates it with the specified priority.
         /// </summary>
         public void Enqueue(TElement element, TPriority priority)
         {
             EnsureEnoughCapacityBeforeAddingNode();
 
-            // Add the node at the end
+            // Virtually add the node at the end of the underlying array.
+            // Note that the node being enqueued does not need to be physically placed
+            // there at this point, as such an assignment would be redundant.
             var node = (element, priority);
-            _nodes[_size] = node;
             _size++;
             _version++;
 
@@ -152,7 +161,7 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Gets the element associated with the minimal priority.
+        ///     Gets the element associated with the minimal priority.
         /// </summary>
         /// <exception cref="InvalidOperationException">The queue is empty.</exception>
         public TElement Peek()
@@ -168,7 +177,7 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Dequeues the element associated with the minimal priority.
+        ///     Dequeues the element associated with the minimal priority.
         /// </summary>
         /// <exception cref="InvalidOperationException">The queue is empty.</exception>
         public TElement Dequeue()
@@ -184,10 +193,10 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Dequeues the element associated with the minimal priority
+        ///     Dequeues the element associated with the minimal priority
         /// </summary>
         /// <returns>
-        /// <see langword="true"/> if the priority queue is non-empty; <see langword="false"/> otherwise.
+        ///     <see langword="true" /> if the priority queue is non-empty; <see langword="false" /> otherwise.
         /// </returns>
         public bool TryDequeue(out TElement element, out TPriority priority)
         {
@@ -204,10 +213,10 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Gets the element associated with the minimal priority.
+        ///     Gets the element associated with the minimal priority.
         /// </summary>
         /// <returns>
-        /// <see langword="true"/> if the priority queue is non-empty; <see langword="false"/> otherwise.
+        ///     <see langword="true" /> if the priority queue is non-empty; <see langword="false" /> otherwise.
         /// </returns>
         public bool TryPeek(out TElement element, out TPriority priority)
         {
@@ -223,13 +232,13 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Combined enqueue/dequeue operation, generally more efficient than sequential Enqueue/Dequeue calls.
+        ///     Combined enqueue/dequeue operation, generally more efficient than sequential Enqueue/Dequeue calls.
         /// </summary>
         public TElement EnqueueDequeue(TElement element, TPriority priority)
         {
             var root = _nodes[RootIndex];
 
-            if (this.Comparer.Compare(priority, root.priority) < 0)
+            if (Comparer.Compare(priority, root.Priority) <= 0)
             {
                 return element;
             }
@@ -241,12 +250,12 @@ namespace GentleTouch.Collection
                 MoveDown(newRoot, RootIndex);
                 _version++;
 
-                return root.element;
+                return root.Element;
             }
         }
 
         /// <summary>
-        /// Enqueues a collection of element/priority pairs.
+        ///     Enqueues a collection of element/priority pairs.
         /// </summary>
         public void EnqueueRange(IEnumerable<(TElement Element, TPriority Priority)> items)
         {
@@ -255,14 +264,26 @@ namespace GentleTouch.Collection
                 throw new ArgumentNullException(nameof(items));
             }
 
-            foreach (var (element, priority) in items)
+            if (_size == 0)
             {
-                Enqueue(element, priority);
+                _nodes = EnumerableHelpers.ToArray(items, out _size);
+
+                if (_size > 1)
+                {
+                    Heapify();
+                }
+            }
+            else
+            {
+                foreach (var (element, priority) in items)
+                {
+                    Enqueue(element, priority);
+                }
             }
         }
 
         /// <summary>
-        /// Enqueues a collection of elements, each associated with the specified priority.
+        ///     Enqueues a collection of elements, each associated with the specified priority.
         /// </summary>
         public void EnqueueRange(IEnumerable<TElement> elements, TPriority priority)
         {
@@ -271,18 +292,43 @@ namespace GentleTouch.Collection
                 throw new ArgumentNullException(nameof(elements));
             }
 
-            foreach (var element in elements)
+            if (_size == 0)
             {
-                Enqueue(element, priority);
+                using (var eumerator = elements.GetEnumerator())
+                {
+                    if (eumerator.MoveNext())
+                    {
+                        _nodes = new (TElement, TPriority)[MinimumElementsToGrowBy];
+                        _nodes[0] = (eumerator.Current, priority);
+                        _size = 1;
+
+                        while (eumerator.MoveNext())
+                        {
+                            EnsureEnoughCapacityBeforeAddingNode();
+                            _nodes[_size++] = (eumerator.Current, priority);
+                        }
+                    }
+                }
+
+                if (_size > 1)
+                {
+                    Heapify();
+                }
+            }
+            else
+            {
+                foreach (var element in elements)
+                {
+                    Enqueue(element, priority);
+                }
             }
         }
 
         /// <summary>
-        /// Removes all items from the priority queue.
+        ///     Removes all items from the priority queue.
         /// </summary>
         public void Clear()
         {
-            // NOTE(CHIV): Not available for us
             /*
             if (RuntimeHelpers.IsReferenceOrContainsReferences<(TElement, TPriority)>())
             {
@@ -294,13 +340,14 @@ namespace GentleTouch.Collection
             {
                 Array.Clear(_nodes, 0, _size);
             }
+
             _size = 0;
             _version++;
         }
 
         /// <summary>
-        /// Ensures that the priority queue has the specified capacity
-        /// and resizes its underlying array if necessary.
+        ///     Ensures that the priority queue has the specified capacity
+        ///     and resizes its underlying array if necessary.
         /// </summary>
         public int EnsureCapacity(int capacity)
         {
@@ -316,47 +363,73 @@ namespace GentleTouch.Collection
                 return currentCapacity;
             }
 
+            int capacityForNextGrowth = ComputeCapacityForNextGrowth();
+            if (capacityForNextGrowth > capacity)
+            {
+                capacity = capacityForNextGrowth;
+            }
+
             SetCapacity(capacity);
             return capacity;
         }
 
         /// <summary>
-        /// Sets the capacity to the actual number of items in the priority queue,
-        /// if that is less than 90 percent of current capacity.
+        ///     Sets the capacity to the actual number of items in the priority queue,
+        ///     if that is less than 90 percent of current capacity.
         /// </summary>
         public void TrimExcess()
         {
-            int threshold = (int)(((double)_nodes.Length) * 0.9);
+            int threshold = (int) (_nodes.Length * 0.9);
             if (_size < threshold)
             {
-                Array.Resize(ref _nodes, _size);
-                _version++;
+                SetCapacity(_size);
             }
         }
 
         private void EnsureEnoughCapacityBeforeAddingNode()
         {
-            if (_size == _nodes.Length)
+            if (_size < _nodes.Length)
             {
-                int newCapacity = (int)((long)_nodes.Length * (long)GrowFactor / 100);
-                if (newCapacity < _nodes.Length + MinimumGrow)
-                {
-                    newCapacity = _nodes.Length + MinimumGrow;
-                }
-                SetCapacity(newCapacity);
+                return;
             }
+
+            int newCapacity = ComputeCapacityForNextGrowth();
+            SetCapacity(newCapacity);
+        }
+
+        private int ComputeCapacityForNextGrowth()
+        {
+            const int GrowthFactor = 2;
+            const int MaxArrayLength = 0X7FEFFFFF;
+
+            int newCapacity = _nodes.Length * GrowthFactor;
+            if (newCapacity < _nodes.Length + MinimumElementsToGrowBy)
+            {
+                newCapacity = _nodes.Length + MinimumElementsToGrowBy;
+            }
+
+            // Allow the structure to grow to maximum possible capacity (~2G elements) before encountering overflow.
+            // Note that this check works even when _nodes.Length overflowed thanks to the (uint) cast.
+
+            if ((uint) newCapacity > MaxArrayLength)
+            {
+                newCapacity = MaxArrayLength;
+            }
+
+            return newCapacity;
         }
 
         /// <summary>
-        /// Grows or shrinks the array holding nodes. Capacity must be >= _size.
+        ///     Grows or shrinks the array holding nodes. Capacity must be >= _size.
         /// </summary>
         private void SetCapacity(int capacity)
         {
             Array.Resize(ref _nodes, capacity);
+            _version++;
         }
 
         /// <summary>
-        /// Removes the node at the specified index.
+        ///     Removes the node at the specified index.
         /// </summary>
         private void Remove(int indexOfNodeToRemove)
         {
@@ -367,6 +440,7 @@ namespace GentleTouch.Collection
             var lastNode = _nodes[lastNodeIndex];
             _size--;
             _version++;
+            _nodes[lastNodeIndex] = default;
 
             // In case we wanted to remove the node that was the last one,
             // we are done.
@@ -383,8 +457,8 @@ namespace GentleTouch.Collection
 
             var nodeToRemove = _nodes[indexOfNodeToRemove];
 
-            int relation = this.Comparer.Compare(lastNode.priority, nodeToRemove.priority);
-            PutAt(lastNode, indexOfNodeToRemove);
+            int relation = Comparer.Compare(lastNode.Priority, nodeToRemove.Priority);
+            _nodes[indexOfNodeToRemove] = lastNode;
 
             if (relation < 0)
             {
@@ -397,30 +471,22 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Puts a node at the specified index.
-        /// </summary>
-        private void PutAt((TElement element, TPriority priority) node, int index)
-        {
-            _nodes[index] = node;
-        }
-
-        /// <summary>
-        /// Gets the index of the last node in the heap.
+        ///     Gets the index of the last node in the heap.
         /// </summary>
         private int GetLastNodeIndex() => _size - 1;
 
         /// <summary>
-        /// Gets the index of an element's parent.
+        ///     Gets the index of an element's parent.
         /// </summary>
-        private int GetParentIndex(int index) => (int)((index - 1) / Arity);
+        private int GetParentIndex(int index) => (index - 1) >> ArityLog2;
 
         /// <summary>
-        /// Gets the index of the first child of an element.
+        ///     Gets the index of the first child of an element.
         /// </summary>
-        private int GetFirstChildIndex(int index) => (int)(Arity * index + 1);
+        private int GetFirstChildIndex(int index) => (int) (Arity * index + 1);
 
         /// <summary>
-        /// Converts an unordered list into a heap.
+        ///     Converts an unordered list into a heap.
         /// </summary>
         private void Heapify()
         {
@@ -439,7 +505,7 @@ namespace GentleTouch.Collection
         }
 
         /// <summary>
-        /// Moves a node up in the tree to restore heap order.
+        ///     Moves a node up in the tree to restore heap order.
         /// </summary>
         private void MoveUp((TElement element, TPriority priority) node, int nodeIndex)
         {
@@ -451,9 +517,9 @@ namespace GentleTouch.Collection
                 int parentIndex = GetParentIndex(nodeIndex);
                 var parent = _nodes[parentIndex];
 
-                if (this.Comparer.Compare(node.priority, parent.priority) < 0)
+                if (Comparer.Compare(node.priority, parent.Priority) < 0)
                 {
-                    PutAt(parent, nodeIndex);
+                    _nodes[nodeIndex] = parent;
                     nodeIndex = parentIndex;
                 }
                 else
@@ -462,11 +528,11 @@ namespace GentleTouch.Collection
                 }
             }
 
-            PutAt(node, nodeIndex);
+            _nodes[nodeIndex] = node;
         }
 
         /// <summary>
-        /// Moves a node down in the tree to restore heap order.
+        ///     Moves a node down in the tree to restore heap order.
         /// </summary>
         private void MoveDown((TElement element, TPriority priority) node, int nodeIndex)
         {
@@ -480,13 +546,13 @@ namespace GentleTouch.Collection
                 // Check if the current node (pointed by 'nodeIndex') should really be extracted
                 // first, or maybe one of its children should be extracted earlier.
                 var topChild = _nodes[i];
-                int childrenIndexesLimit = (int)Math.Min(i + Arity, _size);
+                int childrenIndexesLimit = Math.Min(i + Arity, _size);
                 int topChildIndex = i;
 
                 while (++i < childrenIndexesLimit)
                 {
                     var child = _nodes[i];
-                    if (this.Comparer.Compare(child.priority, topChild.priority) < 0)
+                    if (Comparer.Compare(child.Priority, topChild.Priority) < 0)
                     {
                         topChild = child;
                         topChildIndex = i;
@@ -495,34 +561,34 @@ namespace GentleTouch.Collection
 
                 // In case no child needs to be extracted earlier than the current node,
                 // there is nothing more to do - the right spot was found.
-                if (this.Comparer.Compare(node.priority, topChild.priority) <= 0)
+                if (Comparer.Compare(node.priority, topChild.Priority) <= 0)
                 {
                     break;
                 }
 
                 // Move the top child up by one node and now investigate the
                 // node that was considered to be the top child (recursive).
-                PutAt(topChild, nodeIndex);
+                _nodes[nodeIndex] = topChild;
                 nodeIndex = topChildIndex;
             }
 
-            PutAt(node, nodeIndex);
+            _nodes[nodeIndex] = node;
         }
 
-        public partial class UnorderedItemsCollection : IReadOnlyCollection<(TElement element, TPriority priority)>, ICollection
+        public partial class UnorderedItemsCollection : IReadOnlyCollection<(TElement element, TPriority priority)>,
+            ICollection
         {
             private readonly PriorityQueue<TElement, TPriority> _queue;
 
-            public UnorderedItemsCollection(PriorityQueue<TElement, TPriority> queue)
+            internal UnorderedItemsCollection(PriorityQueue<TElement, TPriority> queue)
             {
                 _queue = queue;
             }
 
-            public int Count => _queue._size;
             object ICollection.SyncRoot => this;
             bool ICollection.IsSynchronized => false;
 
-            public void CopyTo(Array array, int index)
+            void ICollection.CopyTo(Array array, int index)
             {
                 if (array == null)
                 {
@@ -531,12 +597,12 @@ namespace GentleTouch.Collection
 
                 if (array.Rank != 1)
                 {
-                    throw new ArgumentException("SR.Arg_RankMultiDimNotSupported", nameof(array));
+                    throw new ArgumentException("SR.Arg_RankMultiDimNotSupported, nameof(array)");
                 }
 
                 if (array.GetLowerBound(0) != 0)
                 {
-                    throw new ArgumentException("SR.Arg_NonZeroLowerBound", nameof(array));
+                    throw new ArgumentException("SR.Arg_NonZeroLowerBound, nameof(array)");
                 }
 
                 if (index < 0 || index > array.Length)
@@ -558,6 +624,18 @@ namespace GentleTouch.Collection
                     throw new ArgumentException("SR.Argument_InvalidArrayType", nameof(array));
                 }
             }
+
+            public int Count => _queue._size;
+
+            IEnumerator<(TElement element, TPriority priority)> IEnumerable<(TElement element, TPriority priority)>.
+                GetEnumerator()
+                => GetEnumerator();
+
+            IEnumerator IEnumerable.GetEnumerator()
+                => GetEnumerator();
+
+            public Enumerator GetEnumerator()
+                => new Enumerator(_queue);
 
             public struct Enumerator : IEnumerator<(TElement element, TPriority priority)>
             {
@@ -637,6 +715,7 @@ namespace GentleTouch.Collection
                         {
                             ThrowEnumerationNotStartedOrEnded();
                         }
+
                         return _currentElement!.Value;
                     }
                 }
@@ -652,7 +731,7 @@ namespace GentleTouch.Collection
                     throw new InvalidOperationException(message);
                 }
 
-                object IEnumerator.Current => this.Current;
+                object IEnumerator.Current => Current;
 
                 void IEnumerator.Reset()
                 {
@@ -665,15 +744,6 @@ namespace GentleTouch.Collection
                     _currentElement = default;
                 }
             }
-
-            public Enumerator GetEnumerator()
-                => new Enumerator(_queue);
-
-            IEnumerator<(TElement element, TPriority priority)> IEnumerable<(TElement element, TPriority priority)>.GetEnumerator()
-                => GetEnumerator();
-
-            IEnumerator IEnumerable.GetEnumerator()
-                => GetEnumerator();
         }
     }
 }

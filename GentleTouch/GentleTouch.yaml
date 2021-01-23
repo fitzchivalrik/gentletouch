@@ -1,9 +1,11 @@
 ﻿name: GentleTouch
 author: Chivalrik
 description: |-
-  This is a test plugin - this first line is a summary.
+  Allows one to create vibration patterns for the controller and specify triggers for them.
 
-  Down here is a more detailed explanation of what the plugin
-  does, manually wrapped to make sure it stays visible in the
-  installer.
+  Currently supported triggers are:
+  - Cooldowns
+  Support for the following is planned:
+  - Near aether current trigger
+  - Map custom actions to controller button presses
 repo_url: https://example.com/

@@ -39,12 +39,13 @@ namespace GentleTouch
             WRightMotorSpeed = wRightMotorSpeed;
         }
     }
-    
+
     // NOTE (Chiv): Modified from
     // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/GameStructs/ActionManager.cs
     // Licensed under the AGPLv3 or later
     [StructLayout(LayoutKind.Explicit, Size = 0x14)]
-    public readonly struct Cooldown {
+    public readonly struct Cooldown
+    {
         [FieldOffset(0x0)] public readonly byte IsCooldown;
         [FieldOffset(0x4)] public readonly uint ActionID;
         [FieldOffset(0x8)] public readonly float CooldownElapsed;
@@ -60,7 +61,7 @@ namespace GentleTouch
 
         public static implicit operator bool(Cooldown a)
         {
-            return (a.CooldownTotal - a.CooldownElapsed) > 0.35f; //a.IsCooldown == 1; //&&
+            return a.CooldownTotal - a.CooldownElapsed > 0.35f; //a.IsCooldown == 1; //&&
         }
     }
 }

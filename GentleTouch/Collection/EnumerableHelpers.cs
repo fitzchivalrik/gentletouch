@@ -1,18 +1,20 @@
-﻿//https://github.com/pgolebiowski/dotnet-runtime-fork/blob/master/src/libraries/Common/src/System/Collections/Generic/EnumerableHelpers.cs
+﻿// From:
+// https://github.com/pgolebiowski/dotnet-runtime-fork/blob/6072e4d3a7a2a1493f514cdf4be75a3d56580e84/src/libraries/Common/src/System/Collections/Generic/EnumerableHelpers.cs
 // Modifications: Removed internal only stuff and changed namespace
+
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // ReSharper disable All
+
 using System;
 using System.Collections.Generic;
 
 namespace GentleTouch.Collection
 {
-
 #nullable enable
 
     /// <summary>
-    /// Internal helper functions for working with enumerables.
+    ///     Internal helper functions for working with enumerables.
     /// </summary>
     internal static partial class EnumerableHelpers
     {
@@ -20,8 +22,8 @@ namespace GentleTouch.Collection
         /// <param name="source">The enumerable to convert.</param>
         /// <param name="length">The number of items stored in the resulting array, 0-indexed.</param>
         /// <returns>
-        /// The resulting array.  The length of the array may be greater than <paramref name="length"/>,
-        /// which is the actual number of elements in the array.
+        ///     The resulting array.  The length of the array may be greater than <paramref name="length" />,
+        ///     which is the actual number of elements in the array.
         /// </returns>
         internal static T[] ToArray<T>(IEnumerable<T> source, out int length)
         {
@@ -75,7 +77,7 @@ namespace GentleTouch.Collection
                                 // the desired capacity.  This does mean that in the very rare case where we've grown to such a
                                 // large size, each new element added after MaxArrayLength will end up doing a resize.
                                 int newLength = count << 1;
-                                if ((uint)newLength > MaxArrayLength)
+                                if ((uint) newLength > MaxArrayLength)
                                 {
                                     newLength = MaxArrayLength <= count ? count + 1 : MaxArrayLength;
                                 }

@@ -1,33 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace GentleTouch
 {
     public class VibrationPattern
     {
-        public class Step
-        {
-            public int LeftMotorPercentage;
-            public int RightMotorPercentage;
-            public int MillisecondsTillNextStep;
-            public Step(
-                int leftMotorPercentage,
-                int rightMotorPercentage,
-                int millisecondsTillNextStep = 100) =>
-            (LeftMotorPercentage, RightMotorPercentage, MillisecondsTillNextStep)
-                = (leftMotorPercentage, rightMotorPercentage, millisecondsTillNextStep);
-            
-        };
-
-        public IList<Step> Steps = new List<Step>();
         public int Cycles = 1;
         public Guid Guid = Guid.NewGuid();
-        public string Name = "Nameless";
         public bool Infinite;
+        public string Name = "Nameless";
+
+        public IList<Step> Steps = new List<Step>();
 
         internal IEnumerator<Step?> GetEnumerator()
         {
@@ -41,11 +24,26 @@ namespace GentleTouch
                     nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + s.MillisecondsTillNextStep;
                     yield return s;
                 }
+
                 while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
                     yield return null;
             }
         }
+
+        public class Step
+        {
+            public int LeftMotorPercentage;
+            public int MillisecondsTillNextStep;
+            public int RightMotorPercentage;
+
+            public Step(
+                int leftMotorPercentage,
+                int rightMotorPercentage,
+                int millisecondsTillNextStep = 100)
+            {
+                (LeftMotorPercentage, RightMotorPercentage, MillisecondsTillNextStep)
+                    = (leftMotorPercentage, rightMotorPercentage, millisecondsTillNextStep);
+            }
+        }
     }
-    
-    
 }
