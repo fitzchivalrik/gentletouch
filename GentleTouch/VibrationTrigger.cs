@@ -5,10 +5,10 @@ namespace GentleTouch
 {
     public abstract class VibrationTrigger
     {
-        [JsonIgnore] internal VibrationPattern Pattern = null!;
-        public Guid PatternGuid;
         public int Priority;
+        public Guid PatternGuid;
         [JsonIgnore] internal bool ShouldBeTriggered;
+        [JsonIgnore] internal VibrationPattern Pattern = null!;
 
         internal VibrationTrigger(int priority, VibrationPattern pattern)
         {

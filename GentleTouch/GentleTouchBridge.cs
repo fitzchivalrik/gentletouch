@@ -6,7 +6,7 @@ namespace GentleTouch
     public class GentleTouchBridge : IDalamudPlugin
     {
         private GentleTouch _plugin = null!;
-        public string Name => Constant.PluginName;
+        public string Name => GentleTouch.PluginName;
 
         public void Initialize(DalamudPluginInterface pi)
         {

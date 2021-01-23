@@ -20,6 +20,7 @@ namespace GentleTouch
     public class GentleTouch : IDisposable
     {
         private const string Command = "/gentle";
+        public const string PluginName = "GentleTouch";
 
         private static readonly string[] JobsWhitelist =
         {
@@ -237,13 +238,11 @@ namespace GentleTouch
 
             #endregion
 
-            //TODO TESTING
             pi.CommandManager.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(null!, null!); })
             {
-                HelpMessage = "Become gentle.",
+                HelpMessage = "Open GentleTouch configuration menu.",
                 ShowInHelp = true
             });
-            //TODO END TESTING
         }
 
         private void FrameworkInCombatUpdate(Framework framework)
@@ -406,7 +405,7 @@ namespace GentleTouch
 #if DEBUG
         private void DrawDebugUi()
         {
-            ImGui.Begin($"{Constant.PluginName} Debug");
+            ImGui.Begin($"{PluginName} Debug");
             ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
             ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
             foreach (var i in _lastReturnedFromPoll)
@@ -480,10 +479,6 @@ namespace GentleTouch
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
                 _pluginInterface.CommandManager.RemoveHandler(Command);
-                // TODO TESTING
-
-
-                // TODO TESTING END
             }
 
             // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.

@@ -23,7 +23,7 @@ namespace GentleTouch
             ImGui.SetWindowSize(new Vector2(350 * scale, 200 * scale), ImGuiCond.FirstUseEver);
             ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
                 new Vector2(float.MaxValue, float.MaxValue));
-            ImGui.Begin($"{Constant.PluginName} Configuration", ref shouldDrawConfigUi, ImGuiWindowFlags.NoCollapse);
+            ImGui.Begin($"{GentleTouch.PluginName} Configuration", ref shouldDrawConfigUi, ImGuiWindowFlags.NoCollapse);
             if (config.OptForNoUsage)
             {
                 ImGui.Text("You choose to not acknowledge the risks and therefore cannot");
@@ -52,21 +52,21 @@ namespace GentleTouch
             ImGui.Text("This plugin allows you to directly use the motors of your controller.");
             ImGui.Text("Irresponsible usage has a probability of permanent hardware damage.");
             ImGui.Text("The author cannot be held liable for any damage caused by e.g. vibration overuse.");
-            ImGui.Text(
+            ImGui.TextWrapped(
                 "Before using this plugin you have to acknowledge the risks and that you are sole responsible for any damage which might occur.");
             ImGui.Text("You can cancel and remove the plugin if you do not consent.");
             ImGui.Text("Responsible usage should come with no risks.");
             ImGui.Spacing();
             var changed = false;
             if (ImGui.Button(
-                "I hereby acknowledge the risks and that the author cannot be held liable for damage due to misuse"))
+                "I hereby acknowledge the risks"))
             {
                 config.RisksAcknowledged = true;
                 changed = true;
                 ImGui.CloseCurrentPopup();
             }
 
-            if (ImGui.Button("Cancel"))
+            if (ImGui.Button("Cancel##Risks"))
             {
                 config.OptForNoUsage = true;
                 changed = true;
@@ -97,6 +97,7 @@ namespace GentleTouch
                 ImGui.AlignTextToFramePadding();
                 ImGui.Text("Ordered by priority. Drag and Drop on ':::' to swap");
                 int[] toSwap = {0, 0};
+                //TODO (Chiv) This can be a single item, cant it?
                 var toRemoveTrigger = new List<VibrationCooldownTrigger>();
                 foreach (var trigger in config.CooldownTriggers)
                 {
@@ -104,6 +105,7 @@ namespace GentleTouch
 
                     //ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
                     ImGui.Button(":::");
+                    //ImGui.PopStyleColor();
                     if (ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoHoldToOpenOthers |
                                                   ImGuiDragDropFlags.SourceNoPreviewTooltip))
                     {
@@ -114,16 +116,15 @@ namespace GentleTouch
                             // TODO (chiv) const string
                             ImGui.SetDragDropPayload("PRIORITY_PAYLOAD", ptr, sizeof(int));
                         }
-                        //ImGui.SameLine();
+                        ImGui.SameLine();
 #if DEBUG
-                        //ImGui.Text($"Dragging {trigger.ActionName} with prio {trigger.Priority}");
+                        ImGui.Text($"Dragging {trigger.ActionName} with prio {trigger.Priority}");
 #else
-                        //ImGui.Text($"Dragging {trigger.ActionName}");
+                        ImGui.Text($"Dragging {trigger.ActionName}");
 #endif
                         ImGui.EndDragDropSource();
                     }
-
-                    if (ImGui.BeginDragDropTarget())
+                    else if (ImGui.BeginDragDropTarget())
                     {
                         var imGuiPayloadPtr = ImGui.AcceptDragDropPayload("PRIORITY_PAYLOAD",
                             ImGuiDragDropFlags.AcceptBeforeDelivery | ImGuiDragDropFlags.AcceptNoPreviewTooltip |
@@ -137,55 +138,56 @@ namespace GentleTouch
                                 toSwap[1] = trigger.Priority;
                             }
                         }
-                        //ImGui.SameLine();
+                        ImGui.SameLine();
 #if DEBUG
-                        //ImGui.Text($"Swap {trigger.ActionName} with prio {trigger.Priority}");
+                        ImGui.Text($"Swap {trigger.ActionName} with prio {trigger.Priority}");
 #else
-                        //ImGui.Text($"Swap with {trigger.ActionName}");
+                        ImGui.Text($"Swap with {trigger.ActionName}");
 #endif
                         ImGui.EndDragDropTarget();
                     }
-
-                    //ImGui.PopStyleColor();
-                    ImGui.SameLine();
-                    ImGui.Text($"{trigger.Priority + 1}");
+                    else
+                    {
+                        ImGui.SameLine();
+                        ImGui.Text($"{trigger.Priority + 1}");
 #if DEBUG
-                    ImGui.SameLine();
-                    ImGui.AlignTextToFramePadding();
-                    ImGui.Text($"A:{trigger.ActionId} J:{trigger.JobId}");
+                        ImGui.SameLine();
+                        ImGui.AlignTextToFramePadding();
+                        ImGui.Text($"A:{trigger.ActionId} J:{trigger.JobId}");
 #endif
-                    ImGui.SetNextItemWidth(100);
-                    ImGui.SameLine();
-                    changed |= DrawJobCombo(jobs, trigger);
-                    ImGui.PushItemWidth(125 * scale);
-                    ImGui.SameLine();
-                    changed |= DrawActionCombo(pi, allActions, config, trigger);
-                    ImGui.SameLine();
-                    changed |= DrawPatternCombo(config, trigger);
-                    ImGui.PopItemWidth();
-                    ImGui.SameLine();
-                    if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?");
+                        ImGui.SetNextItemWidth(100);
+                        ImGui.SameLine();
+                        changed |= DrawJobCombo(jobs, trigger);
+                        ImGui.PushItemWidth(125 * scale);
+                        ImGui.SameLine();
+                        changed |= DrawActionCombo(pi, allActions, config, trigger);
+                        ImGui.SameLine();
+                        changed |= DrawPatternCombo(config, trigger);
+                        ImGui.PopItemWidth();
+                        ImGui.SameLine();
+                        // TODO (Chiv) Generic Method for PopUp Confirm Delete
+                        if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?");
 
-                    if (ImGui.IsItemHovered())
-                    {
-                        ImGui.BeginTooltip();
-                        ImGui.Text("Delete this pattern.");
-                        ImGui.EndTooltip();
-                    }
-
-                    if (ImGui.BeginPopup("Sure?"))
-                    {
-                        ImGui.Text("Really delete?");
-                        if (ImGui.Button("Yes"))
+                        if (ImGui.IsItemHovered())
                         {
-                            toRemoveTrigger.Add(trigger);
-                            changed = true;
-                            ImGui.CloseCurrentPopup();
+                            ImGui.BeginTooltip();
+                            ImGui.Text("Delete this pattern.");
+                            ImGui.EndTooltip();
                         }
 
-                        ImGui.EndPopup();
-                    }
+                        if (ImGui.BeginPopup("Sure?"))
+                        {
+                            ImGui.Text("Really delete?");
+                            if (ImGui.Button("Yes"))
+                            {
+                                toRemoveTrigger.Add(trigger);
+                                changed = true;
+                                ImGui.CloseCurrentPopup();
+                            }
 
+                            ImGui.EndPopup();
+                        }
+                    }
                     ImGui.PopID();
                 }
 
@@ -238,20 +240,19 @@ namespace GentleTouch
             Configuration config, VibrationCooldownTrigger trigger)
         {
             var changed = false;
-            var actionsCollection = trigger.JobId == 0
-                ? allActions.Where(a => a.RowId == 0)
-                : allActions.Where(a => a.RowId != 0 && a.ClassJobCategory.Value.HasClass((uint) trigger.JobId));
-            var actions = actionsCollection as FFXIVAction[] ?? actionsCollection.ToArray();
-            if (!actions.Select(a => a.RowId).Contains((uint) trigger.ActionId))
-            {
-                trigger.ActionId = (int) actions[0].RowId;
-                trigger.ActionName = actions[0].Name;
-                trigger.ActionCooldownGroup = actions[0].CooldownGroup;
-                changed = true;
-            }
-
             if (!ImGui.BeginCombo($"##Action{trigger.Priority}", trigger.ActionName)) return changed;
             {
+                var actionsCollection = trigger.JobId == 0
+                    ? allActions.Where(a => a.RowId == 0)
+                    : allActions.Where(a => a.RowId != 0 && a.ClassJobCategory.Value.HasClass((uint) trigger.JobId));
+                var actions = actionsCollection as FFXIVAction[] ?? actionsCollection.ToArray();
+                if (!actions.Select(a => a.RowId).Contains((uint) trigger.ActionId))
+                {
+                    trigger.ActionId = (int) actions[0].RowId;
+                    trigger.ActionName = actions[0].Name;
+                    trigger.ActionCooldownGroup = actions[0].CooldownGroup;
+                    changed = true;
+                }
                 foreach (var a in actions)
                 {
                     var isSelected = a.RowId == trigger.ActionId;
@@ -265,10 +266,8 @@ namespace GentleTouch
 
                     if (isSelected) ImGui.SetItemDefaultFocus();
                 }
-
                 ImGui.EndCombo();
             }
-
             return changed;
         }
 
@@ -288,7 +287,6 @@ namespace GentleTouch
 
                 if (isSelected) ImGui.SetItemDefaultFocus();
             }
-
             ImGui.EndCombo();
             return changed;
         }
@@ -297,15 +295,17 @@ namespace GentleTouch
         {
             if (!ImGui.BeginTabItem("Pattern")) return false;
             var changed = false;
-            if (ImGui.Button("Add"))
+            if (ImGui.Button("Add##Pattern"))
             {
                 config.Patterns.Add(new VibrationPattern());
                 changed = true;
             }
 
+            //TODO (Chiv) Single Item suffice?
             var toRemovePatterns = new List<VibrationPattern>();
             foreach (var pattern in config.Patterns)
             {
+                //TODO (CHIV) MEthod for each step and delete popup
                 ImGui.PushID(pattern.Guid.GetHashCode());
                 if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?");
 
@@ -518,9 +518,8 @@ namespace GentleTouch
         private static bool DrawGeneralTab(Configuration config)
         {
             if (!ImGui.BeginTabItem("General")) return false;
-            var changed = ImGui.Checkbox(nameof(config.ShouldVibrateDuringPvP), ref config.ShouldVibrateDuringPvP);
-            changed |= ImGui.Checkbox(nameof(config.NoVibrationDuringCasting), ref config.NoVibrationDuringCasting);
-            changed |= ImGui.Checkbox(nameof(config.NoVibrationWithSheathedWeapon), ref config.NoVibrationWithSheathedWeapon);
+            var changed = ImGui.Checkbox("Disable cooldown trigger while casting.", ref config.NoVibrationDuringCasting);
+            changed |= ImGui.Checkbox("Disable cooldown trigger while weapon is sheathed.", ref config.NoVibrationWithSheathedWeapon);
             ImGui.EndTabItem();
             return changed;
         }

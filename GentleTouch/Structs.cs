@@ -2,31 +2,6 @@
 
 namespace GentleTouch
 {
-    public static class Constant
-    {
-        public const string PluginName = "GentleTouch";
-    }
-
-    public readonly struct VibrationStepStruct
-    {
-        public readonly ushort LeftMotorPercentage;
-        public readonly ushort RightMotorPercentage;
-        public readonly ushort MillisecondsTillNextStep;
-
-        public VibrationStepStruct(ushort leftMotorPercentage, ushort rightMotorPercentage,
-            ushort millisecondsTillNextStep = 100)
-        {
-            LeftMotorPercentage = leftMotorPercentage;
-            RightMotorPercentage = rightMotorPercentage;
-            MillisecondsTillNextStep = millisecondsTillNextStep;
-        }
-
-        public override string ToString()
-        {
-            return $"{LeftMotorPercentage}:{RightMotorPercentage} - {MillisecondsTillNextStep}ms";
-        }
-    }
-
     [StructLayout(LayoutKind.Explicit, Size = 0x4)]
     public readonly struct XInputVibration
     {
