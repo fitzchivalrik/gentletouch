@@ -3,9 +3,10 @@ author: Chivalrik
 description: |-
   Allows one to create vibration patterns for the controller and specify triggers for them.
 
+  You need to configure patterns and triggers in before it will work.
   Currently supported triggers are:
   - Cooldowns
   Support for the following is planned:
   - Near aether current trigger
   - Map custom actions to controller button presses
-repo_url: https://example.com/
+repo_url: https://github.com/fitzchivalrik/gentletouch

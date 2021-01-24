@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 
 namespace GentleTouch
 {
@@ -11,7 +12,7 @@ namespace GentleTouch
         public string Name = "Nameless";
 
         public IList<Step> Steps = new List<Step>();
-
+        
         internal IEnumerator<Step?> GetEnumerator()
         {
             var nextTimeStep = 0L;
@@ -33,8 +34,8 @@ namespace GentleTouch
         public class Step
         {
             public int LeftMotorPercentage;
-            public int MillisecondsTillNextStep;
             public int RightMotorPercentage;
+            public int MillisecondsTillNextStep;
 
             public Step(
                 int leftMotorPercentage,

@@ -79,13 +79,9 @@ namespace GentleTouch
         private int _cooldownGroup = 58;
         private readonly int[] _lastReturnedFromPoll = new int[100];
         private int _currentIndex;
-
-
-        //TODO END TESTING
 #endif
 
         private nint _maybeControllerStruct;
-
         private bool _shouldDrawConfigUi =
 #if DEBUG
                 true
@@ -124,21 +120,20 @@ namespace GentleTouch
 
             #endregion
 
-            // TODO TESTING Move that to Configuration initializer...or?
+            #region Example Patterns and Triggers on first start
             if (config.Patterns.Count == 0)
             {
-                var pattern = new VibrationPattern
+                var bothStrong = new VibrationPattern
                 {
                     Steps = new[]
                     {
-                        new VibrationPattern.Step(100, 100, 200),
-                        new VibrationPattern.Step(0, 0, 200)
+                        new VibrationPattern.Step(100, 100, 100),
                     },
                     Cycles = 2,
                     Infinite = false,
                     Name = "Both Strong"
                 };
-                var pattern2 = new VibrationPattern
+                var lightPulse = new VibrationPattern
                 {
                     Steps = new[]
                     {
@@ -146,9 +141,9 @@ namespace GentleTouch
                         new VibrationPattern.Step(0, 0, 500)
                     },
                     Infinite = true,
-                    Name = "GCD (Slow pulse)"
+                    Name = "Light pulse"
                 };
-                var pattern3 = new VibrationPattern
+                var leftStrong = new VibrationPattern
                 {
                     Steps = new[]
                     {
@@ -158,7 +153,7 @@ namespace GentleTouch
                     Cycles = 1,
                     Name = "Left Strong"
                 };
-                var pattern4 = new VibrationPattern
+                var rightStrong = new VibrationPattern
                 {
                     Steps = new[]
                     {
@@ -168,26 +163,40 @@ namespace GentleTouch
                     Cycles = 1,
                     Name = "Right Strong"
                 };
-                config.Patterns.Add(pattern);
-                config.Patterns.Add(pattern2);
-                config.Patterns.Add(pattern3);
-                config.Patterns.Add(pattern4);
+                var simpleRhythmic = new VibrationPattern
+                {
+                    Steps = new[]
+                    {
+                        new VibrationPattern.Step(75, 75, 200),
+                        new VibrationPattern.Step(0, 0, 200),
+                    },
+                    Infinite = false,
+                    Cycles = 2,
+                    Name = "Simple Rhythmic"
+                };
+                config.Patterns.Add(bothStrong);
+                config.Patterns.Add(lightPulse);
+                config.Patterns.Add(leftStrong);
+                config.Patterns.Add(rightStrong);
+                config.Patterns.Add(simpleRhythmic);
                 pi.SavePluginConfig(config);
             }
-
             if (config.CooldownTriggers.Count == 0)
             {
-                //TODO (Chiv) Add another default for another job
-                config.CooldownTriggers.Add(
-                    new VibrationCooldownTrigger(30, "Shade Shift", 2241, 21, 0, config.Patterns[0]));
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(30, "Hide", 2245, 6, 1, config.Patterns[2]));
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(0, "GCD", 0, 58, 2,
-                    config.Patterns[1]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    30, "Dream Within a Dream", 3566, 16, 0, config.Patterns[0]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    30, "Shadow Fang", 2257, 10, 1, config.Patterns[2]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    30, "Mug", 2248, 18, 2, config.Patterns[3]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    19, "Fight or Flight", 20, 14, 3, config.Patterns[0]));
+                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    0, "GCD", 0, 58, 4, config.Patterns[1]));
                 pi.SavePluginConfig(config);
             }
-
-            // TODO END TESTING
-
+            #endregion
+            
             _pluginInterface = pi;
             _config = config;
             // NOTE (Chiv) Resolve pattern GUIDs to pattern

@@ -29,7 +29,7 @@ namespace GentleTouch
         public int JobId;
 
 
-        // NOTE (Chiv) Used by NewtonSoft.
+        // NOTE (Chiv) Used by NewtonSoft (or is it?)
         // TODO (Chiv) Maybe write custom Serializer?
         public VibrationCooldownTrigger(int jobId, string actionName, int actionId, int actionCooldownGroup,
             int priority, Guid patternGuid) : base(priority, patternGuid)
