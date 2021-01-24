@@ -2,10 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Text;
 using Dalamud.Configuration;
 using Dalamud.Plugin;
 using ImGuiNET;
 using Lumina.Excel.GeneratedSheets;
+using Newtonsoft.Json;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 namespace GentleTouch
@@ -294,10 +296,35 @@ namespace GentleTouch
         {
             if (!ImGui.BeginTabItem("Patterns")) return false;
             var changed = false;
+            const string importExportPrefix = "GTP";
             if (ImGui.Button("Add new Pattern"))
             {
                 config.Patterns.Add(new VibrationPattern());
                 changed = true;
+            }
+            ImGui.SameLine();
+            if (ImGui.Button("Import from clipboard"))
+            {
+                var prefixedBase64 = ImGui.GetClipboardText();
+                try
+                {
+                    if (prefixedBase64 is not null && prefixedBase64.StartsWith(importExportPrefix))
+                    {
+                        var base64Bytes = Convert.FromBase64String(prefixedBase64.Substring(importExportPrefix.Length));
+                        var json = Encoding.UTF8.GetString(base64Bytes);
+                        var p = JsonConvert.DeserializeObject<VibrationPattern>(json);
+                        if (p is not null)
+                        {
+                            p.Guid = Guid.NewGuid();
+                            config.Patterns.Add(p);
+                            changed = true;
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignored
+                }
             }
 
             //TODO (Chiv) Single Item suffice?
@@ -312,7 +339,18 @@ namespace GentleTouch
                 }
 
                 ImGui.SameLine();
-                if (ImGui.TreeNode($"{pattern.Name}###{pattern.Guid}"))
+                var open = ImGui.TreeNodeEx($"{pattern.Name}###{pattern.Guid}", ImGuiTreeNodeFlags.AllowItemOverlap);
+                ImGui.SameLine(225);
+                if(ImGui.Button("Export to clipboard"))
+                {
+                    var jsonOutput = JsonConvert.SerializeObject(pattern);
+                    if (jsonOutput is not null)
+                    {
+                        var prefixedBase64 = $"{importExportPrefix}{Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonOutput))}";
+                        ImGui.SetClipboardText(prefixedBase64);
+                    }
+                }
+                if (open)
                 {
                     changed |= DrawPatternGenerals(pattern);
                     changed |= DrawPatternSteps(scale, pattern);

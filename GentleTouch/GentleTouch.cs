@@ -127,7 +127,7 @@ namespace GentleTouch
                 {
                     Steps = new[]
                     {
-                        new VibrationPattern.Step(100, 100, 100),
+                        new VibrationPattern.Step(100, 100, 200),
                     },
                     Cycles = 2,
                     Infinite = false,
@@ -147,7 +147,7 @@ namespace GentleTouch
                 {
                     Steps = new[]
                     {
-                        new VibrationPattern.Step(100, 0, 100),
+                        new VibrationPattern.Step(100, 0, 200),
                     },
                     Infinite = false,
                     Cycles = 1,
@@ -157,7 +157,7 @@ namespace GentleTouch
                 {
                     Steps = new[]
                     {
-                        new VibrationPattern.Step(0, 100, 100),
+                        new VibrationPattern.Step(0, 100, 200),
                     },
                     Infinite = false,
                     Cycles = 1,
