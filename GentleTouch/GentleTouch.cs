@@ -414,7 +414,7 @@ namespace GentleTouch
 #if DEBUG
         private void DrawDebugUi()
         {
-            ImGui.Begin($"{PluginName} Debug");
+            if(!ImGui.Begin($"{PluginName} Debug")) return;
             ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
             ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
             foreach (var i in _lastReturnedFromPoll)

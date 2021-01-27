@@ -24,7 +24,10 @@ namespace GentleTouch
             ImGui.SetNextWindowSize(new Vector2(575 * scale, 400 * scale), ImGuiCond.FirstUseEver);
             ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
                 new Vector2(float.MaxValue, float.MaxValue));
-            ImGui.Begin($"{GentleTouch.PluginName} Configuration", ref shouldDrawConfigUi, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.HorizontalScrollbar);
+            if (!ImGui.Begin($"{GentleTouch.PluginName} Configuration", ref shouldDrawConfigUi,
+                ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.HorizontalScrollbar))
+                return shouldDrawConfigUi;
+            //TODO (Chiv): Configs are getting saved between install -> cancel just backs out
             if (config.OptForNoUsage)
             {
                 ImGui.Text("You choose to not acknowledge the risks and therefore cannot");
