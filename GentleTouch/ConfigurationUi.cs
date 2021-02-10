@@ -27,16 +27,8 @@ namespace GentleTouch
             if (!ImGui.Begin($"{GentleTouch.PluginName} Configuration", ref shouldDrawConfigUi,
                 ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.HorizontalScrollbar))
                 return shouldDrawConfigUi;
-            //TODO (Chiv): Configs are getting saved between install -> cancel just backs out
-            if (config.OptForNoUsage)
-            {
-                ImGui.Text("You choose to not acknowledge the risks and therefore cannot");
-                ImGui.Text("use this plugin. Please remove it in the plugin installer.");
-                ImGui.End();
-                return shouldDrawConfigUi;
-            }
 
-            changed |= DrawRisksWarning(config);
+            changed |= DrawRisksWarning(config, ref shouldDrawConfigUi);
             ImGui.BeginTabBar("ConfigurationTabs", ImGuiTabBarFlags.NoTooltip);
             changed |= DrawGeneralTab(config);
             changed |= DrawPatternTab(config, scale);
@@ -51,7 +43,7 @@ namespace GentleTouch
             return shouldDrawConfigUi;
         }
 
-        private static bool DrawRisksWarning(Configuration config)
+        private static bool DrawRisksWarning(Configuration config, ref bool shouldDrawConfigUi)
         {
             if (!config.RisksAcknowledged) ImGui.OpenPopup("Warning");
             ImGui.SetNextWindowSize(new Vector2(500, 215), ImGuiCond.Always);
@@ -67,8 +59,7 @@ namespace GentleTouch
             var changed = false;
             if (ImGui.Button("Cancel##Risks"))
             {
-                config.OptForNoUsage = true;
-                changed = true;
+                shouldDrawConfigUi = false;
                 ImGui.CloseCurrentPopup();
             }
             ImGui.SameLine();

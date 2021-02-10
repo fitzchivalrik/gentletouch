@@ -8,7 +8,6 @@ namespace GentleTouch
         public IList<VibrationCooldownTrigger> CooldownTriggers = new List<VibrationCooldownTrigger>();
         public IList<VibrationPattern> Patterns = new List<VibrationPattern>();
 
-        public bool OptForNoUsage;
         public bool RisksAcknowledged;
         
         public bool NoVibrationWithSheathedWeapon;
