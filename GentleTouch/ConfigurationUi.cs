@@ -91,7 +91,7 @@ namespace GentleTouch
             IReadOnlyCollection<FFXIVAction> allActions, string dragDropMarker)
         {
             var changed = false;
-            if (!ImGui.TreeNodeEx("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.Framed)) return changed;
+            if (!ImGui.TreeNodeEx("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.CollapsingHeader)) return changed;
             if (ImGui.Button("Add new Cooldown Trigger"))
             {
                 var lastTrigger = config.CooldownTriggers.LastOrDefault();
@@ -118,10 +118,10 @@ namespace GentleTouch
                     ImGui.SameLine();
                     ImGui.AlignTextToFramePadding();
                     ImGui.Text($"{trigger.Priority + 1:00}");
-#if DEBUG
+                    #if DEBUG
                     ImGui.SameLine();
-                    ImGui.Text($"A:{trigger.ActionId:0000} J:{trigger.JobId:00}");
-#endif
+                    ImGui.Text($"J:{trigger.JobId:00} A:{trigger.ActionId:0000} ");
+                    #endif
                     ImGui.SetNextItemWidth(100);
                     ImGui.SameLine();
                     changed |= DrawJobCombo(jobs, trigger);
@@ -328,7 +328,7 @@ namespace GentleTouch
                     // ignored
                 }
             }
-
+            ImGui.Separator();
             //TODO (Chiv) Single Item suffice?
             var toRemovePatterns = new List<VibrationPattern>();
             foreach (var pattern in config.Patterns)
@@ -357,6 +357,7 @@ namespace GentleTouch
                     changed |= DrawPatternGenerals(pattern);
                     changed |= DrawPatternSteps(scale, pattern);
                 }
+                ImGui.Separator();
                 ImGui.PopID();
             }
 
