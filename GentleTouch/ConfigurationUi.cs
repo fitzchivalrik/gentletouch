@@ -81,78 +81,86 @@ namespace GentleTouch
             if (!ImGui.BeginTabItem("Triggers")) return false;
             const string dragDropMarker = "::";
             var changed = false;
-            if (ImGui.TreeNodeEx("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.Framed))
-            {
-                if (ImGui.Button("Add new Cooldown Trigger"))
-                {
-                    var lastTrigger = config.CooldownTriggers.LastOrDefault();
-                    config.CooldownTriggers.Add(
-                        new VibrationCooldownTrigger(
-                            0, "GCD", 0, 58, (lastTrigger?.Priority + 1) ?? 0, config.Patterns[0]));
-                    changed = true;
-                }
-
-                ImGui.SameLine();
-                ImGui.AlignTextToFramePadding();
-                ImGui.Text($"Ordered by priority. Drag and Drop on '{dragDropMarker}' to swap");
-                int[] toSwap = {0, 0};
-                //TODO (Chiv) This can be a single item, can't it?
-                var toRemoveTrigger = new List<VibrationCooldownTrigger>();
-                foreach (var trigger in config.CooldownTriggers)
-                {
-                    ImGui.PushID(trigger.Priority);
-                    if(!DrawDragDropTargetSources(trigger, toSwap, dragDropMarker))
-                    {
-                        //ImGui.SetCursorPos(pos);
-                        //ImGui.AlignTextToFramePadding();
-                        //ImGui.Text(":::");
-                        ImGui.SameLine();
-                        ImGui.AlignTextToFramePadding();
-                        ImGui.Text($"{trigger.Priority + 1}");
-#if DEBUG
-                        ImGui.SameLine();
-                        ImGui.Text($"A:{trigger.ActionId} J:{trigger.JobId}");
-#endif
-                        ImGui.SetNextItemWidth(100);
-                        ImGui.SameLine();
-                        changed |= DrawJobCombo(jobs, trigger);
-                        ImGui.PushItemWidth(125 * scale);
-                        ImGui.SameLine();
-                        changed |= DrawActionCombo(allActions, trigger);
-                        ImGui.SameLine();
-                        changed |= DrawPatternCombo(config, trigger);
-                        ImGui.PopItemWidth();
-                        ImGui.SameLine();
-                        if (DrawDeleteButton("X", new Vector2(23 * scale, 23 * scale), "Delete this pattern."))
-                        {
-                            toRemoveTrigger.Add(trigger);
-                            changed = true;
-                        }
-                    }
-                    ImGui.PopID();
-                }
-
-                if (toSwap[0] != toSwap[1])
-                {
-                    var t = config.CooldownTriggers[toSwap[0]];
-                    config.CooldownTriggers[toSwap[0]] = config.CooldownTriggers[toSwap[1]];
-                    config.CooldownTriggers[toSwap[1]] = t;
-                    config.CooldownTriggers[toSwap[0]].Priority = toSwap[0];
-                    config.CooldownTriggers[toSwap[1]].Priority = toSwap[1];
-                    toSwap[0] = toSwap[1] = 0;
-                    changed = true;
-                }
-
-                foreach (var trigger in toRemoveTrigger) config.CooldownTriggers.Remove(trigger);
-
-                if (toRemoveTrigger.Count > 0)
-                    for (var i = 0; i < config.CooldownTriggers.Count; i++)
-                        config.CooldownTriggers[i].Priority = i;
-                ImGui.Spacing();
-                ImGui.TreePop();
-            }
+            changed |= DrawCooldownTriggerTree(config, scale, jobs, allActions, dragDropMarker);
 
             ImGui.EndTabItem();
+            return changed;
+        }
+
+        private static bool DrawCooldownTriggerTree(Configuration config, float scale, IReadOnlyCollection<ClassJob> jobs,
+            IReadOnlyCollection<FFXIVAction> allActions, string dragDropMarker)
+        {
+            var changed = false;
+            if (!ImGui.TreeNodeEx("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.Framed)) return changed;
+            if (ImGui.Button("Add new Cooldown Trigger"))
+            {
+                var lastTrigger = config.CooldownTriggers.LastOrDefault();
+                config.CooldownTriggers.Add(
+                    new VibrationCooldownTrigger(
+                        0, "GCD", 0, 58, (lastTrigger?.Priority + 1) ?? 0, config.Patterns[0]));
+                changed = true;
+            }
+
+            ImGui.SameLine();
+            ImGui.AlignTextToFramePadding();
+            ImGui.Text($"Ordered by priority. Drag and Drop on '{dragDropMarker}' to swap");
+            int[] toSwap = {0, 0};
+            //TODO (Chiv) This can be a single item, can't it?
+            var toRemoveTrigger = new List<VibrationCooldownTrigger>();
+            foreach (var trigger in config.CooldownTriggers)
+            {
+                ImGui.PushID(trigger.Priority);
+                if (!DrawDragDropTargetSources(trigger, toSwap, dragDropMarker))
+                {
+                    //ImGui.SetCursorPos(pos);
+                    //ImGui.AlignTextToFramePadding();
+                    //ImGui.Text(":::");
+                    ImGui.SameLine();
+                    ImGui.AlignTextToFramePadding();
+                    ImGui.Text($"{trigger.Priority + 1:00}");
+#if DEBUG
+                    ImGui.SameLine();
+                    ImGui.Text($"A:{trigger.ActionId:0000} J:{trigger.JobId:00}");
+#endif
+                    ImGui.SetNextItemWidth(100);
+                    ImGui.SameLine();
+                    changed |= DrawJobCombo(jobs, trigger);
+                    ImGui.PushItemWidth(125 * scale);
+                    ImGui.SameLine();
+                    changed |= DrawActionCombo(allActions, trigger);
+                    ImGui.SameLine();
+                    changed |= DrawPatternCombo(config, trigger);
+                    ImGui.PopItemWidth();
+                    ImGui.SameLine();
+                    if (DrawDeleteButton("X", new Vector2(23 * scale, 23 * scale), "Delete this pattern."))
+                    {
+                        toRemoveTrigger.Add(trigger);
+                        changed = true;
+                    }
+                }
+
+                ImGui.PopID();
+            }
+
+            if (toSwap[0] != toSwap[1])
+            {
+                var t = config.CooldownTriggers[toSwap[0]];
+                config.CooldownTriggers[toSwap[0]] = config.CooldownTriggers[toSwap[1]];
+                config.CooldownTriggers[toSwap[1]] = t;
+                config.CooldownTriggers[toSwap[0]].Priority = toSwap[0];
+                config.CooldownTriggers[toSwap[1]].Priority = toSwap[1];
+                toSwap[0] = toSwap[1] = 0;
+                changed = true;
+            }
+
+            foreach (var trigger in toRemoveTrigger) config.CooldownTriggers.Remove(trigger);
+
+            if (toRemoveTrigger.Count > 0)
+                for (var i = 0; i < config.CooldownTriggers.Count; i++)
+                    config.CooldownTriggers[i].Priority = i;
+            ImGui.Spacing();
+            ImGui.TreePop();
+
             return changed;
         }
 

@@ -9,7 +9,7 @@ Licensed under AGPLv3 or later.
 ## Features
 
 - Create different vibration patterns
-- Add cooldown triggers to execute patterns when its safe to activate the cooldown again
+- Add cooldown triggers to perform patterns when its safe to activate the cooldown again
 
 ## Planned
 
