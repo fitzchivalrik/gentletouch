@@ -81,17 +81,17 @@ namespace GentleTouch
             if (!ImGui.BeginTabItem("Triggers")) return false;
             const string dragDropMarker = "::";
             var changed = false;
-            changed |= DrawCooldownTriggerTree(config, scale, jobs, allActions, dragDropMarker);
+            changed |= DrawCooldownTriggers(config, scale, jobs, allActions, dragDropMarker);
 
             ImGui.EndTabItem();
             return changed;
         }
 
-        private static bool DrawCooldownTriggerTree(Configuration config, float scale, IReadOnlyCollection<ClassJob> jobs,
+        private static bool DrawCooldownTriggers(Configuration config, float scale, IReadOnlyCollection<ClassJob> jobs,
             IReadOnlyCollection<FFXIVAction> allActions, string dragDropMarker)
         {
             var changed = false;
-            if (!ImGui.TreeNodeEx("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.CollapsingHeader)) return changed;
+            if (!ImGui.CollapsingHeader("Cooldown Triggers (work only in combat)")) return changed;
             if (ImGui.Button("Add new Cooldown Trigger"))
             {
                 var lastTrigger = config.CooldownTriggers.LastOrDefault();
@@ -112,9 +112,6 @@ namespace GentleTouch
                 ImGui.PushID(trigger.Priority);
                 if (!DrawDragDropTargetSources(trigger, toSwap, dragDropMarker))
                 {
-                    //ImGui.SetCursorPos(pos);
-                    //ImGui.AlignTextToFramePadding();
-                    //ImGui.Text(":::");
                     ImGui.SameLine();
                     ImGui.AlignTextToFramePadding();
                     ImGui.Text($"{trigger.Priority + 1:00}");
@@ -159,7 +156,6 @@ namespace GentleTouch
                 for (var i = 0; i < config.CooldownTriggers.Count; i++)
                     config.CooldownTriggers[i].Priority = i;
             ImGui.Spacing();
-            ImGui.TreePop();
 
             return changed;
         }
@@ -171,11 +167,6 @@ namespace GentleTouch
             //ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
             ImGui.Button(dragDropMarker);
             //ImGui.PopStyleColor();
-            // NOTE (chiv) Alternative with selectable with explicit size and cursor swapping
-            //var pos = ImGui.GetCursorPos();
-            //var selectableSize = ImGui.CalcTextSize(":::");
-            //var _ = false;
-            //ImGui.Selectable("##:::", ref _, ImGuiSelectableFlags.None, selectableSize);
             if (ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoHoldToOpenOthers |
                                           ImGuiDragDropFlags.SourceNoPreviewTooltip))
             {
@@ -185,9 +176,6 @@ namespace GentleTouch
                     var ptr = new IntPtr(&prio);
                     ImGui.SetDragDropPayload(payloadIdentifier, ptr, sizeof(int));
                 }
-                //ImGui.SetCursorPos(pos);
-                //ImGui.AlignTextToFramePadding();
-                //ImGui.Text(":::");
                 ImGui.SameLine();
                 ImGui.AlignTextToFramePadding();
                 ImGui.Text($"{trigger.Priority + 1} Dragging {trigger.ActionName}.");
@@ -196,28 +184,23 @@ namespace GentleTouch
             }
 
             if (!ImGui.BeginDragDropTarget()) return false;
+            var imGuiPayloadPtr = ImGui.AcceptDragDropPayload(payloadIdentifier,
+                ImGuiDragDropFlags.AcceptNoPreviewTooltip |
+                ImGuiDragDropFlags.AcceptNoDrawDefaultRect);
+            unsafe
             {
-                var imGuiPayloadPtr = ImGui.AcceptDragDropPayload(payloadIdentifier,
-                    ImGuiDragDropFlags.AcceptNoPreviewTooltip |
-                    ImGuiDragDropFlags.AcceptNoDrawDefaultRect);
-                unsafe
+                if (imGuiPayloadPtr.NativePtr is not null)
                 {
-                    if (imGuiPayloadPtr.NativePtr is not null)
-                    {
-                        var prio = *(int*) imGuiPayloadPtr.Data;
-                        toSwap[0] = prio;
-                        toSwap[1] = trigger.Priority;
-                    }
+                    var prio = *(int*) imGuiPayloadPtr.Data;
+                    toSwap[0] = prio;
+                    toSwap[1] = trigger.Priority;
                 }
-                //ImGui.SetCursorPos(pos);
-                //ImGui.AlignTextToFramePadding();
-                //ImGui.Text(":::");
-                ImGui.SameLine();
-                ImGui.AlignTextToFramePadding();
-                ImGui.Text($"{trigger.Priority + 1} Swap with {trigger.ActionName}");
-                ImGui.EndDragDropTarget();
-                return true;
             }
+            ImGui.SameLine();
+            ImGui.AlignTextToFramePadding();
+            ImGui.Text($"{trigger.Priority + 1} Swap with {trigger.ActionName}");
+            ImGui.EndDragDropTarget();
+            return true;
         }
         private static bool DrawPatternCombo(Configuration config, VibrationCooldownTrigger trigger)
         {
