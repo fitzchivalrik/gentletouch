@@ -401,7 +401,7 @@ namespace GentleTouch
         {
             #if DEBUG
             ImGui.Text($"UUID: {pattern.Guid}");
-            if (ImGui.IsItemClicked(1)) ImGui.SetClipboardText(pattern.Guid.ToString());
+            if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) ImGui.SetClipboardText(pattern.Guid.ToString());
             #endif
             var changed = false;
             ImGui.SetNextItemWidth(175);
