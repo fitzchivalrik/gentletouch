@@ -25,7 +25,7 @@ namespace GentleTouch
             ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
                 new Vector2(float.MaxValue, float.MaxValue));
             if (!ImGui.Begin($"{GentleTouch.PluginName} Configuration", ref shouldDrawConfigUi,
-                ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.HorizontalScrollbar))
+                ImGuiWindowFlags.NoCollapse))
                 return shouldDrawConfigUi;
 
             changed |= DrawRisksWarning(config, ref shouldDrawConfigUi);
@@ -79,66 +79,52 @@ namespace GentleTouch
             IReadOnlyCollection<ClassJob> jobs, IReadOnlyCollection<FFXIVAction> allActions)
         {
             if (!ImGui.BeginTabItem("Triggers")) return false;
-            const string dragDropMarker = "::";
             var changed = false;
-            changed |= DrawCooldownTriggers(config, scale, jobs, allActions, dragDropMarker);
-
+            changed |= DrawCooldownTriggers(config, scale, jobs, allActions);
             ImGui.EndTabItem();
             return changed;
         }
-
-        private static bool DrawCooldownTriggers(Configuration config, float scale, IReadOnlyCollection<ClassJob> jobs,
-            IReadOnlyCollection<FFXIVAction> allActions, string dragDropMarker)
+        
+        private static bool DrawCooldownTriggers(Configuration config, float scale, IEnumerable<ClassJob> jobs,
+            IReadOnlyCollection<FFXIVAction> allActions)
         {
             var changed = false;
+            const string dragDropMarker = "::";
             if (!ImGui.CollapsingHeader("Cooldown Triggers (work only in combat)")) return changed;
             if (ImGui.Button("Add new Cooldown Trigger"))
             {
                 var lastTrigger = config.CooldownTriggers.LastOrDefault();
+                var firstAction =
+                    allActions.First(a => a.ClassJobCategory.Value.HasClass(_currentJobTabId));
                 config.CooldownTriggers.Add(
                     new VibrationCooldownTrigger(
-                        0, "GCD", 0, 58, (lastTrigger?.Priority + 1) ?? 0, config.Patterns[0]));
+                        (int)_currentJobTabId,
+                        firstAction.Name,
+                        (int)firstAction.RowId,
+                        firstAction.CooldownGroup,
+                        (lastTrigger?.Priority + 1) ?? 0,
+                        config.Patterns.FirstOrDefault() ?? new VibrationPattern()
+                        ));
                 changed = true;
             }
-
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
             ImGui.Text($"Ordered by priority. Drag and Drop on '{dragDropMarker}' to swap");
             int[] toSwap = {0, 0};
             //TODO (Chiv) This can be a single item, can't it?
             var toRemoveTrigger = new List<VibrationCooldownTrigger>();
-            foreach (var trigger in config.CooldownTriggers)
+            
+            const ImGuiTabBarFlags tabBarFlags = ImGuiTabBarFlags.Reorderable 
+                                                 | ImGuiTabBarFlags.TabListPopupButton 
+                                                 | ImGuiTabBarFlags.FittingPolicyScroll;
+            if (ImGui.BeginTabBar("JobsTabs", tabBarFlags))
             {
-                ImGui.PushID(trigger.Priority);
-                if (!DrawDragDropTargetSources(trigger, toSwap, dragDropMarker))
+                foreach (var job in jobs)
                 {
-                    ImGui.SameLine();
-                    ImGui.AlignTextToFramePadding();
-                    ImGui.Text($"{trigger.Priority + 1:00}");
-                    #if DEBUG
-                    ImGui.SameLine();
-                    ImGui.Text($"J:{trigger.JobId:00} A:{trigger.ActionId:0000} ");
-                    #endif
-                    ImGui.SetNextItemWidth(100);
-                    ImGui.SameLine();
-                    changed |= DrawJobCombo(jobs, trigger);
-                    ImGui.PushItemWidth(125 * scale);
-                    ImGui.SameLine();
-                    changed |= DrawActionCombo(allActions, trigger);
-                    ImGui.SameLine();
-                    changed |= DrawPatternCombo(config, trigger);
-                    ImGui.PopItemWidth();
-                    ImGui.SameLine();
-                    if (DrawDeleteButton("X", new Vector2(23 * scale, 23 * scale), "Delete this pattern."))
-                    {
-                        toRemoveTrigger.Add(trigger);
-                        changed = true;
-                    }
+                    changed |= DrawJobTabItem(config, scale, allActions, dragDropMarker, job, toSwap, toRemoveTrigger);
                 }
-
-                ImGui.PopID();
+                ImGui.EndTabBar();
             }
-
             if (toSwap[0] != toSwap[1])
             {
                 var t = config.CooldownTriggers[toSwap[0]];
@@ -160,13 +146,65 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawDragDropTargetSources(VibrationCooldownTrigger trigger, IList<int> toSwap, string dragDropMarker)
+        private static uint _currentJobTabId = 0;
+        private static bool DrawJobTabItem(Configuration config, float scale, IEnumerable<FFXIVAction> allActions,
+            string dragDropMarker, ClassJob job, IList<int> toSwap, ICollection<VibrationCooldownTrigger> toRemoveTrigger)
+        {
+            if (!ImGui.BeginTabItem(job.NameEnglish)) return false;
+            var changed = false;
+            ImGui.Indent();
+            ImGui.Indent(25);
+            ImGui.Text("Action Name");
+            ImGui.SameLine(195);
+            ImGui.Text("Pattern Name");
+            ImGui.Unindent(25);
+            _currentJobTabId = job.RowId;
+            var triggerForJob =
+                config.CooldownTriggers.Where(t => t.JobId == _currentJobTabId);
+            var actionsCollection = 
+                allActions.Where(a => a.ClassJobCategory.Value.HasClass(job.RowId));
+            var actions = actionsCollection as FFXIVAction[] ?? actionsCollection.ToArray();
+            foreach (var trigger in triggerForJob)
+            {
+                ImGui.PushID(trigger.Priority);
+
+                //TODO (Chiv): Button style
+                //ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+                ImGui.Button(dragDropMarker);
+                //ImGui.PopStyleColor();
+                if (!DrawDragDropTargetSources(trigger, toSwap))
+                {
+                    ImGui.SameLine();
+                    #if DEBUG
+                    ImGui.AlignTextToFramePadding();
+                    ImGui.Text($"{trigger.Priority + 1:00}");
+                    ImGui.SameLine();
+                    ImGui.Text($"J:{trigger.JobId:00} A:{trigger.ActionId:0000} ");
+                    #endif
+                    ImGui.PushItemWidth(135 * scale);
+                    ImGui.SameLine();
+                    changed |= DrawActionCombo(actions, trigger);
+                    ImGui.SameLine();
+                    changed |= DrawPatternCombo(config.Patterns, trigger);
+                    ImGui.PopItemWidth();
+                    ImGui.SameLine();
+                    if (DrawDeleteButton("X", new Vector2(23 * scale, 23 * scale), "Delete this trigger."))
+                    {
+                        toRemoveTrigger.Add(trigger);
+                        changed = true;
+                    }
+                }
+                ImGui.PopID();
+            }
+
+            ImGui.Unindent();
+            ImGui.EndTabItem();
+            return changed;
+        }
+
+        private static bool DrawDragDropTargetSources(VibrationCooldownTrigger trigger, IList<int> toSwap)
         {
             const string payloadIdentifier = "PRIORITY_PAYLOAD";
-            //TODO (Chiv): Button style
-            //ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
-            ImGui.Button(dragDropMarker);
-            //ImGui.PopStyleColor();
             if (ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoHoldToOpenOthers |
                                           ImGuiDragDropFlags.SourceNoPreviewTooltip))
             {
@@ -178,7 +216,11 @@ namespace GentleTouch
                 }
                 ImGui.SameLine();
                 ImGui.AlignTextToFramePadding();
+                #if DEBUG
                 ImGui.Text($"{trigger.Priority + 1} Dragging {trigger.ActionName}.");
+                #else
+                ImGui.Text($"Dragging {trigger.ActionName}.");
+                #endif
                 ImGui.EndDragDropSource();
                 return true;
             }
@@ -198,15 +240,19 @@ namespace GentleTouch
             }
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
+            #if DEBUG
             ImGui.Text($"{trigger.Priority + 1} Swap with {trigger.ActionName}");
+            #else
+            ImGui.Text($"Swap with {trigger.ActionName}");
+            #endif
             ImGui.EndDragDropTarget();
             return true;
         }
-        private static bool DrawPatternCombo(Configuration config, VibrationCooldownTrigger trigger)
+        private static bool DrawPatternCombo(IEnumerable<VibrationPattern> patterns, VibrationCooldownTrigger trigger)
         {
             if (!ImGui.BeginCombo($"##Pattern{trigger.Priority}", trigger.Pattern.Name)) return false;
             var changed = false;
-            foreach (var p in config.Patterns)
+            foreach (var p in patterns)
             {
                 var isSelected = p.Guid == trigger.PatternGuid;
                 if (ImGui.Selectable(p.Name, isSelected))
@@ -223,51 +269,22 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawActionCombo(IReadOnlyCollection<FFXIVAction> allActions, VibrationCooldownTrigger trigger)
+        private static bool DrawActionCombo(IEnumerable<FFXIVAction> actions, VibrationCooldownTrigger trigger)
         {
-            var actionsCollection = trigger.JobId == 0
-                ? allActions.Where(a => a.RowId == 0)
-                : allActions.Where(a => a.RowId != 0 && a.ClassJobCategory.Value.HasClass((uint) trigger.JobId));
-            var actions = actionsCollection as FFXIVAction[] ?? actionsCollection.ToArray();
+            if (!ImGui.BeginCombo($"##Action{trigger.Priority}",
+                trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : trigger.ActionName)
+            ) return false;
             var changed = false;
-            if (!actions.Select(a => a.RowId).Contains((uint) trigger.ActionId))
+            foreach (var a in actions)
             {
-                trigger.ActionId = (int) actions[0].RowId;
-                trigger.ActionName = actions[0].Name;
-                trigger.ActionCooldownGroup = actions[0].CooldownGroup;
-                changed = true;
-            }
-            if (!ImGui.BeginCombo($"##Action{trigger.Priority}", trigger.ActionName)) return changed;
-            {
-                foreach (var a in actions)
+                var isSelected = a.RowId == trigger.ActionId;
+                if (ImGui.Selectable(
+                    a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : a.Name,
+                    isSelected))
                 {
-                    var isSelected = a.RowId == trigger.ActionId;
-                    if (ImGui.Selectable(a.Name, isSelected))
-                    {
-                        trigger.ActionId = (int) a.RowId;
-                        trigger.ActionName = a.Name;
-                        trigger.ActionCooldownGroup = a.CooldownGroup;
-                        changed = true;
-                    }
-
-                    if (isSelected) ImGui.SetItemDefaultFocus();
-                }
-                ImGui.EndCombo();
-            }
-            return changed;
-        }
-
-        private static bool DrawJobCombo(IReadOnlyCollection<ClassJob> jobs, VibrationCooldownTrigger trigger)
-        {
-            if (!ImGui.BeginCombo($"##Jobs{trigger.Priority}",
-                jobs.Single(j => j.RowId == trigger.JobId).NameEnglish)) return false;
-            var changed = false;
-            foreach (var job in jobs)
-            {
-                var isSelected = job.RowId == trigger.JobId;
-                if (ImGui.Selectable(job.NameEnglish, isSelected))
-                {
-                    trigger.JobId = (int) job.RowId;
+                    trigger.ActionId = (int) a.RowId;
+                    trigger.ActionName = a.Name;
+                    trigger.ActionCooldownGroup = a.CooldownGroup;
                     changed = true;
                 }
 
@@ -276,6 +293,8 @@ namespace GentleTouch
             ImGui.EndCombo();
             return changed;
         }
+        
+        
 
         private static bool DrawPatternTab(Configuration config, float scale)
         {

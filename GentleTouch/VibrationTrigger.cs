@@ -23,6 +23,7 @@ namespace GentleTouch
 
     public class VibrationCooldownTrigger : VibrationTrigger
     {
+        public const int GCDCooldownGroup = 58;
         public int ActionCooldownGroup;
         public int ActionId;
         public string ActionName;

@@ -13,6 +13,9 @@ using Lumina.Excel.GeneratedSheets;
 using Lumina.Text;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
+// TODO 3 WRite new onboarding with (i) creation of example triggers and (ii) GCD creation for all
+// TODO 4 Change JobId to uint in VibrationCooldownTrigger
+// TODO 5 Refactor DrawCombo to generic
 namespace GentleTouch
 {
     public partial class GentleTouch : IDisposable
@@ -74,7 +77,7 @@ namespace GentleTouch
         private int _rightMotorSpeed = 100;
         private int _leftMotorSpeed;
         private int _dwControllerIndex = 1;
-        private int _cooldownGroup = 58;
+        private int _cooldownGroup = VibrationCooldownTrigger.GCDCooldownGroup;
         private readonly int[] _lastReturnedFromPoll = new int[100];
         private int _currentIndex;
 #endif
@@ -118,6 +121,7 @@ namespace GentleTouch
 
             #endregion
 
+            //TODO Change that to ask pop up on patterns.Empty == true
             #region Example Patterns and Triggers on first start
             if (config.Patterns.Count == 0)
             {
@@ -189,8 +193,9 @@ namespace GentleTouch
                     30, "Mug", 2248, 18, 2, config.Patterns[3]));
                 config.CooldownTriggers.Add(new VibrationCooldownTrigger(
                     19, "Fight or Flight", 20, 14, 3, config.Patterns[0]));
+                //TODO refator to new GCD foramt -> obsolte
                 config.CooldownTriggers.Add(new VibrationCooldownTrigger(
-                    0, "GCD", 0, 58, 4, config.Patterns[1]));
+                    0, "GCD", 0, VibrationCooldownTrigger.GCDCooldownGroup, 4, config.Patterns[1]));
                 pi.SavePluginConfig(config);
             }
             #endregion
@@ -225,23 +230,49 @@ namespace GentleTouch
             #endregion
 
             #region Excel Data
+            
 
-            _jobs = _pluginInterface.Data.Excel.GetSheet<ClassJob>().Where(j => JobsWhitelist.Contains(j.Name))
-                .Append(new ClassJob
-                {
-                    Name = new SeString(Encoding.UTF8.GetBytes("All")),
-                    NameEnglish = new SeString(Encoding.UTF8.GetBytes("All Jobs")),
-                    RowId = 0
-                })
+            _jobs = _pluginInterface.Data.Excel.GetSheet<ClassJob>()
+                .Where(j => JobsWhitelist.Contains(j.Name))
                 .ToArray();
-            _allActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
-                .Where(a => a.IsPlayerAction && a.CooldownGroup != 58 && !a.IsPvP)
-                .Append(new FFXIVAction
+            var actions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
+                .Where(a => a.IsPlayerAction && a.CooldownGroup != VibrationCooldownTrigger.GCDCooldownGroup && !a.IsPvP);
+            var gcdActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
+                .Where(a => a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup)
+                .GroupBy(
+                    a => a.ClassJobCategory.Row,
+                    (key, group) => group.First()
+                ).ToArray(); //TODO ToArray because of BreakingGCDWorkaround
+            _allActions = actions.Concat(gcdActions).ToArray();
+
+            #region BreakingGCDWorkaround
+
+            var gcdTrigger = _config.CooldownTriggers.FirstOrDefault(t => t.JobId == 0);
+            if (gcdTrigger is not null)
+            {
+                _config.CooldownTriggers.RemoveAt(gcdTrigger.Priority);
+                for (var i = 0; i < config.CooldownTriggers.Count; i++)
+                    config.CooldownTriggers[i].Priority = i;
+                foreach (var job in _jobs)
                 {
-                    Name = new SeString(Encoding.UTF8.GetBytes("GCD")),
-                    CooldownGroup = 58,
-                    RowId = 0
-                }).ToArray();
+                    var action = gcdActions.First(a => a.ClassJobCategory.Value.HasClass(job.RowId));
+                    var lastTrigger = _config.CooldownTriggers.LastOrDefault();
+                    _config.CooldownTriggers.Add(
+                        new VibrationCooldownTrigger(
+                            (int)job.RowId,
+                            action.Name,
+                            (int)action.RowId,
+                            action.CooldownGroup,
+                            lastTrigger?.Priority + 1 ?? 0,
+                            gcdTrigger.Pattern
+                        ));
+                }
+                _pluginInterface.SavePluginConfig(_config);
+            }
+            
+
+            #endregion
+
 
             #endregion
 
@@ -325,7 +356,7 @@ namespace GentleTouch
             //TODO (Chiv) Proper Switch for trigger types
             var cooldowns =
                 _config.CooldownTriggers
-                    .Where(t => t.JobId == 0 || t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
+                    .Where(t => t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
                     .Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
             
             var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown c)[] ?? cooldowns.ToArray();

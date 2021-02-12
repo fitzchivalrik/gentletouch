@@ -43,14 +43,26 @@ namespace GentleTouch
             }
 
             ImGui.PopStyleColor();
-            ImGui.Separator();
             ImGui.PopItemWidth();
-            // NOTE (Chiv): 58 is GCD
+            ImGui.Separator();
+            if (_highestPriorityTrigger is VibrationCooldownTrigger ct)
+            {
+                ImGui.Text("Current active Cooldown Trigger");
+                ImGui.Text(
+                    $"Priority:       {ct.Priority}" +
+                    $"\nAction Name:  {ct.ActionName}" +
+                    $"\nAction Id:      {ct.ActionId:00}" +
+                    $"\nJob Id:         {ct.JobId:00}" +
+                    $"\nPattern Name: {ct.Pattern.Name}");
+                ImGui.Separator();
+            }
             var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup - 1);
             ImGui.Text($"Cooldown Elapsed: {cooldown.CooldownElapsed}");
             ImGui.Text($"Cooldown Total: {cooldown.CooldownTotal}");
             ImGui.Text($"IsCooldown: {cooldown.IsCooldown}");
             ImGui.Text($"ActionID: {cooldown.ActionID}");
+
+
             ImGui.End();
         }
 
