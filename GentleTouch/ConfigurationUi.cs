@@ -272,14 +272,23 @@ namespace GentleTouch
         private static bool DrawActionCombo(IEnumerable<FFXIVAction> actions, VibrationCooldownTrigger trigger)
         {
             if (!ImGui.BeginCombo($"##Action{trigger.Priority}",
-                trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : trigger.ActionName)
+                #if DEBUG
+                trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? $"{trigger.ActionName} (GCD)" : trigger.ActionName
+                #else
+                trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : trigger.ActionName
+                #endif
+                )
             ) return false;
             var changed = false;
             foreach (var a in actions)
             {
                 var isSelected = a.RowId == trigger.ActionId;
                 if (ImGui.Selectable(
+                    #if DEBUG
+                    a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? $"{a.Name} (GCD)" : a.Name,
+                    #else
                     a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : a.Name,
+                    #endif
                     isSelected))
                 {
                     trigger.ActionId = (int) a.RowId;

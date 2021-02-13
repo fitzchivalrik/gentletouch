@@ -238,19 +238,26 @@ namespace GentleTouch
             var actions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
                 .Where(a => a.IsPlayerAction && a.CooldownGroup != VibrationCooldownTrigger.GCDCooldownGroup && !a.IsPvP);
             var gcdActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
-                .Where(a => a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup)
+                // NOTE the ClassJobCategory.Name.Length is a hack,
+                // as every Job (not class!) has up to two GCDs:
+                // One for its Class, if available (ClassJobCategory.Name.Length==6(+1, whitespace), e.g 'LNC DRG')
+                // and one for the Job itself (ClassJobCategory.Name.Length==3, e.g. 'DRG')
+                // We do not want duplicates, so we just take the GCD for the Job and discard the Class ones.
+                .Where(a => 
+                    a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup
+                    && !a.IsRoleAction && a.ClassJobCategory.Value.Name.ToString().Length == 3)
                 .GroupBy(
                     a => a.ClassJobCategory.Row,
                     (key, group) => group.First()
-                ).ToArray(); //TODO ToArray because of BreakingGCDWorkaround
+                ).ToArray(); //TODO ToArray because of BreakingGCDMigration
             _allActions = actions.Concat(gcdActions).ToArray();
 
-            #region BreakingGCDWorkaround
+            #region BreakingGCDMigration
 
             var gcdTrigger = _config.CooldownTriggers.FirstOrDefault(t => t.JobId == 0);
             if (gcdTrigger is not null)
             {
-                _config.CooldownTriggers.RemoveAt(gcdTrigger.Priority);
+                _config.CooldownTriggers.Remove(gcdTrigger);
                 for (var i = 0; i < config.CooldownTriggers.Count; i++)
                     config.CooldownTriggers[i].Priority = i;
                 foreach (var job in _jobs)
