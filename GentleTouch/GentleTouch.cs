@@ -42,7 +42,8 @@ namespace GentleTouch
             "black mage",
             "red mage",
             "blue mage",
-            "summoner"
+            "summoner",
+            "sage"
         };
 
         // TODO (Chiv): Check Right and Left Motor for x360/XOne Gamepad
