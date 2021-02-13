@@ -122,7 +122,7 @@ namespace GentleTouch
 
             #endregion
 
-            //TODO Change that to ask pop up on patterns.Empty == true
+            //TODO Change that to ask popup on patterns.Empty == true
             #region Example Patterns and Triggers on first start
             if (config.Patterns.Count == 0)
             {
@@ -194,9 +194,6 @@ namespace GentleTouch
                     30, "Mug", 2248, 18, 2, config.Patterns[3]));
                 config.CooldownTriggers.Add(new VibrationCooldownTrigger(
                     19, "Fight or Flight", 20, 14, 3, config.Patterns[0]));
-                //TODO refator to new GCD foramt -> obsolte
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
-                    0, "GCD", 0, VibrationCooldownTrigger.GCDCooldownGroup, 4, config.Patterns[1]));
                 pi.SavePluginConfig(config);
             }
             #endregion
@@ -267,9 +264,9 @@ namespace GentleTouch
                     var lastTrigger = _config.CooldownTriggers.LastOrDefault();
                     _config.CooldownTriggers.Add(
                         new VibrationCooldownTrigger(
-                            (int)job.RowId,
+                            job.RowId,
                             action.Name,
-                            (int)action.RowId,
+                            action.RowId,
                             action.CooldownGroup,
                             lastTrigger?.Priority + 1 ?? 0,
                             gcdTrigger.Pattern

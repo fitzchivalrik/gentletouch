@@ -25,21 +25,21 @@ namespace GentleTouch
     {
         public const int GCDCooldownGroup = 58;
         public int ActionCooldownGroup;
-        public int ActionId;
+        public uint ActionId;
         public string ActionName;
-        public int JobId;
+        public uint JobId;
 
 
         // NOTE (Chiv) Used by NewtonSoft (or is it?)
         // TODO (Chiv) Maybe write custom Serializer?
-        public VibrationCooldownTrigger(int jobId, string actionName, int actionId, int actionCooldownGroup,
+        public VibrationCooldownTrigger(uint jobId, string actionName, uint actionId, int actionCooldownGroup,
             int priority, Guid patternGuid) : base(priority, patternGuid)
         {
             (JobId, ActionName, ActionId, ActionCooldownGroup)
                 = (jobId, actionName, actionId, actionCooldownGroup);
         }
 
-        internal VibrationCooldownTrigger(int jobId, string actionName, int actionId, int actionCooldownGroup,
+        internal VibrationCooldownTrigger(uint jobId, string actionName, uint actionId, int actionCooldownGroup,
             int priority,
             VibrationPattern pattern) : base(priority, pattern)
         {

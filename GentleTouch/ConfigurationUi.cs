@@ -98,11 +98,11 @@ namespace GentleTouch
                     allActions.First(a => a.ClassJobCategory.Value.HasClass(_currentJobTabId));
                 config.CooldownTriggers.Add(
                     new VibrationCooldownTrigger(
-                        (int)_currentJobTabId,
+                        _currentJobTabId,
                         firstAction.Name,
-                        (int)firstAction.RowId,
+                        firstAction.RowId,
                         firstAction.CooldownGroup,
-                        (lastTrigger?.Priority + 1) ?? 0,
+                        lastTrigger?.Priority + 1 ?? 0,
                         config.Patterns.FirstOrDefault() ?? new VibrationPattern()
                         ));
                 changed = true;
@@ -291,7 +291,7 @@ namespace GentleTouch
                     #endif
                     isSelected))
                 {
-                    trigger.ActionId = (int) a.RowId;
+                    trigger.ActionId = a.RowId;
                     trigger.ActionName = a.Name;
                     trigger.ActionCooldownGroup = a.CooldownGroup;
                     changed = true;
