@@ -12,7 +12,17 @@ namespace GentleTouch
         
         public bool NoVibrationWithSheathedWeapon;
         public bool NoVibrationDuringCasting;
+        public Onboarding OnboardingStep;
 
-        public int Version { get; set; }
+        public int Version { get; set; } = 1;
+    }
+
+    public enum Onboarding
+    {
+        TellAboutRisk,
+        AskAboutExamplePatterns,
+        AskAboutExampleCooldownTriggers,
+        AskAboutGCD,
+        Done
     }
 }

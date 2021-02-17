@@ -121,91 +121,18 @@ namespace GentleTouch
             const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
 
             #endregion
-
-            //TODO Change that to ask popup on patterns.Empty == true
-            #region Example Patterns and Triggers on first start
-            if (config.Patterns.Count == 0)
-            {
-                var bothStrong = new VibrationPattern
-                {
-                    Steps = new[]
-                    {
-                        new VibrationPattern.Step(100, 100, 200),
-                    },
-                    Cycles = 2,
-                    Infinite = false,
-                    Name = "Both Strong"
-                };
-                var lightPulse = new VibrationPattern
-                {
-                    Steps = new[]
-                    {
-                        new VibrationPattern.Step(25, 25, 200),
-                        new VibrationPattern.Step(0, 0, 500)
-                    },
-                    Infinite = true,
-                    Name = "Light pulse"
-                };
-                var leftStrong = new VibrationPattern
-                {
-                    Steps = new[]
-                    {
-                        new VibrationPattern.Step(100, 0, 200),
-                    },
-                    Infinite = false,
-                    Cycles = 1,
-                    Name = "Left Strong"
-                };
-                var rightStrong = new VibrationPattern
-                {
-                    Steps = new[]
-                    {
-                        new VibrationPattern.Step(0, 100, 200),
-                    },
-                    Infinite = false,
-                    Cycles = 1,
-                    Name = "Right Strong"
-                };
-                var simpleRhythmic = new VibrationPattern
-                {
-                    Steps = new[]
-                    {
-                        new VibrationPattern.Step(75, 75, 200),
-                        new VibrationPattern.Step(0, 0, 200),
-                    },
-                    Infinite = false,
-                    Cycles = 2,
-                    Name = "Simple Rhythmic"
-                };
-                config.Patterns.Add(bothStrong);
-                config.Patterns.Add(lightPulse);
-                config.Patterns.Add(leftStrong);
-                config.Patterns.Add(rightStrong);
-                config.Patterns.Add(simpleRhythmic);
-                pi.SavePluginConfig(config);
-            }
-            if (config.CooldownTriggers.Count == 0)
-            {
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
-                    30, "Dream Within a Dream", 3566, 16, 0, config.Patterns[0]));
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
-                    30, "Shadow Fang", 2257, 10, 1, config.Patterns[2]));
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
-                    30, "Mug", 2248, 18, 2, config.Patterns[3]));
-                config.CooldownTriggers.Add(new VibrationCooldownTrigger(
-                    19, "Fight or Flight", 20, 14, 3, config.Patterns[0]));
-                pi.SavePluginConfig(config);
-            }
-            #endregion
+            
             
             _pluginInterface = pi;
             _config = config;
             // NOTE (Chiv) Resolve pattern GUIDs to pattern
             // TODO (Chiv) Better in custom Serializer?
             foreach (var trigger in _config.CooldownTriggers)
+            {
                 //TODO (Chiv) Error handling if something messed up guids.
                 trigger.Pattern = _config.Patterns.FirstOrDefault(p => p.Guid == trigger.PatternGuid) ??
                                   new VibrationPattern();
+            }
             _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
             _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
             _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
@@ -228,7 +155,6 @@ namespace GentleTouch
             #endregion
 
             #region Excel Data
-            
 
             _jobs = _pluginInterface.Data.Excel.GetSheet<ClassJob>()
                 .Where(j => JobsWhitelist.Contains(j.Name))
@@ -241,40 +167,56 @@ namespace GentleTouch
                 // One for its Class, if available (ClassJobCategory.Name.Length==6(+1, whitespace), e.g 'LNC DRG')
                 // and one for the Job itself (ClassJobCategory.Name.Length==3, e.g. 'DRG')
                 // We do not want duplicates, so we just take the GCD for the Job and discard the Class ones.
-                .Where(a => 
+                .Where(a =>
                     a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup
                     && !a.IsRoleAction && a.ClassJobCategory.Value.Name.ToString().Length == 3)
                 .GroupBy(
                     a => a.ClassJobCategory.Row,
-                    (key, group) => group.First()
-                ).ToArray(); //TODO ToArray because of BreakingGCDMigration
-            _allActions = actions.Concat(gcdActions).ToArray();
+                    (_, group) => group.First()
+                );
+            var allActions = actions.Concat(gcdActions);
+            _allActions = allActions as FFXIVAction[] ?? allActions.ToArray();
+            
+            #region BreakingConfigurationVersionMigration
 
-            #region BreakingGCDMigration
-
-            var gcdTrigger = _config.CooldownTriggers.FirstOrDefault(t => t.JobId == 0);
-            if (gcdTrigger is not null)
+            //TODO Remove before v1.0
+            if (config.Version == 0)
             {
-                _config.CooldownTriggers.Remove(gcdTrigger);
-                for (var i = 0; i < config.CooldownTriggers.Count; i++)
-                    config.CooldownTriggers[i].Priority = i;
-                foreach (var job in _jobs)
+                // Risk Bool Migration
+                if (config.RisksAcknowledged)
                 {
-                    var action = gcdActions.First(a => a.ClassJobCategory.Value.HasClass(job.RowId));
-                    var lastTrigger = _config.CooldownTriggers.LastOrDefault();
-                    _config.CooldownTriggers.Add(
-                        new VibrationCooldownTrigger(
-                            job.RowId,
-                            action.Name,
-                            action.RowId,
-                            action.CooldownGroup,
-                            lastTrigger?.Priority + 1 ?? 0,
-                            gcdTrigger.Pattern
-                        ));
+                    config.OnboardingStep = Onboarding.Done;
                 }
+                
+                // GCD Migration
+                var gcdTrigger = _config.CooldownTriggers.FirstOrDefault(t => t.JobId == 0);
+                if (gcdTrigger is not null)
+                {
+                    _config.CooldownTriggers.Remove(gcdTrigger);
+                    for (var i = 0; i < config.CooldownTriggers.Count; i++)
+                        config.CooldownTriggers[i].Priority = i;
+                    foreach (var job in _jobs)
+                    {
+                        var action = _allActions
+                            .Where(a => a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup)
+                            .First(a => a.ClassJobCategory.Value.HasClass(job.RowId));
+                        var lastTrigger = _config.CooldownTriggers.LastOrDefault();
+                        _config.CooldownTriggers.Add(
+                            new VibrationCooldownTrigger(
+                                job.RowId,
+                                action.Name,
+                                action.RowId,
+                                action.CooldownGroup,
+                                lastTrigger?.Priority + 1 ?? 0,
+                                gcdTrigger.Pattern
+                            ));
+                    }
+                }
+
+                config.Version = 1;
                 _pluginInterface.SavePluginConfig(_config);
             }
-            
+
 
             #endregion
 
