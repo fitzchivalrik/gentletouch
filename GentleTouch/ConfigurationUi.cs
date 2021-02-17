@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using Dalamud.Configuration;
+using Dalamud.Interface;
 using Dalamud.Plugin;
 using ImGuiNET;
 using Lumina.Excel.GeneratedSheets;
@@ -276,7 +277,7 @@ namespace GentleTouch
             IReadOnlyCollection<FFXIVAction> allActions)
         {
             var changed = false;
-            const string dragDropMarker = "::";
+            const FontAwesomeIcon dragDropMarker = FontAwesomeIcon.Sort;
             if (!ImGui.CollapsingHeader("Cooldown Triggers (work only in combat)")) return changed;
             if (ImGui.Button("Add new Cooldown Trigger"))
             {
@@ -296,7 +297,11 @@ namespace GentleTouch
             }
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
-            ImGui.Text($"Ordered by priority. Drag and Drop on '{dragDropMarker}' to swap");
+            ImGui.Text($"Ordered by priority. To swap, Drag and Drop on");
+            ImGui.SameLine();
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.Text(dragDropMarker.ToIconString());
+            ImGui.PopFont();
             int[] toSwap = {0, 0};
             //TODO (Chiv) This can be a single item, can't it?
             var toRemoveTrigger = new List<VibrationCooldownTrigger>();
@@ -335,7 +340,7 @@ namespace GentleTouch
 
         private static uint _currentJobTabId = 0;
         private static bool DrawJobTabItem(Configuration config, float scale, IEnumerable<FFXIVAction> allActions,
-            string dragDropMarker, ClassJob job, IList<int> toSwap, ICollection<VibrationCooldownTrigger> toRemoveTrigger)
+            FontAwesomeIcon dragDropMarker, ClassJob job, IList<int> toSwap, ICollection<VibrationCooldownTrigger> toRemoveTrigger)
         {
             if (!ImGui.BeginTabItem(job.NameEnglish)) return false;
             var changed = false;
@@ -357,7 +362,11 @@ namespace GentleTouch
 
                 //TODO (Chiv): Button style
                 //ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
-                ImGui.Button(dragDropMarker);
+                ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+                ImGui.PushFont(UiBuilder.IconFont);
+                ImGui.Button(dragDropMarker.ToIconString());
+                ImGui.PopFont();
+                ImGui.PopStyleColor();
                 //ImGui.PopStyleColor();
                 if (!DrawDragDropTargetSources(trigger, toSwap))
                 {
@@ -375,7 +384,8 @@ namespace GentleTouch
                     changed |= DrawPatternCombo(config.Patterns, trigger);
                     ImGui.PopItemWidth();
                     ImGui.SameLine();
-                    if (DrawDeleteButton("X", new Vector2(23 * scale, 23 * scale), "Delete this trigger."))
+                    if (DrawDeleteButton(FontAwesomeIcon.TrashAlt,
+                        new Vector2(23 * scale, 23 * scale), "Delete this trigger."))
                     {
                         toRemoveTrigger.Add(trigger);
                         changed = true;
@@ -532,7 +542,7 @@ namespace GentleTouch
             foreach (var pattern in config.Patterns)
             {
                 ImGui.PushID(pattern.Guid.GetHashCode());
-                if (DrawDeleteButton("Delete"))
+                if (DrawDeleteButton(FontAwesomeIcon.TrashAlt))
                 {
                     toRemovePatterns.Add(pattern);
                     changed = true;
@@ -567,11 +577,13 @@ namespace GentleTouch
         private static bool DrawPatternSteps(float scale, VibrationPattern pattern)
         {
             var changed = false;
-            if (ImGui.Button("+##PatternStep", new Vector2(23*scale, 23*scale)))
+            ImGui.PushFont(UiBuilder.IconFont);
+            if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##PatternStep", new Vector2(23*scale, 23*scale)))
             {
                 pattern.Steps.Add(new VibrationPattern.Step(0, 0));
                 changed = true;
             }
+            ImGui.PopFont();
             // TODO  (Chiv) Single item suffice?
             var toRemoveSteps = new List<int>();
             ImGui.SameLine();
@@ -589,7 +601,9 @@ namespace GentleTouch
                     ImGui.SameLine();
                     changed |= DrawHorizontalStep(scale, s);
                     ImGui.SameLine();
-                    if (DrawDeleteButton("X", new Vector2(23 * scale, 23 * scale), "Delete this Step."))
+                    if (DrawDeleteButton(FontAwesomeIcon.TrashAlt,
+                        new Vector2(23 * scale, 23 * scale),
+                        "Delete this Step."))
                     {
                         toRemoveSteps.Add(i);
                         changed = true;
@@ -627,79 +641,7 @@ namespace GentleTouch
             if (ImGui.InputInt("Cycles", ref pattern.Cycles, 1)) changed = true;
             return changed;
         }
-
-        private static bool DrawVerticalStep(float scale, List<int> toRemoveSteps, int i,
-            VibrationPattern.Step s)
-        {
-            var changed = false;
-            ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(4, 4));
-            if (ImGui.Button("X", new Vector2(23 * scale, 23 * scale))) ImGui.OpenPopup("Sure?2");
-
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.BeginTooltip();
-                ImGui.Text("Delete this step.");
-                ImGui.EndTooltip();
-            }
-
-            if (ImGui.BeginPopup("Sure?2"))
-            {
-                ImGui.Text("Really delete?");
-                if (ImGui.Button("Yes"))
-                {
-                    toRemoveSteps.Add(i);
-                    changed = true;
-                    ImGui.CloseCurrentPopup();
-                }
-
-                ImGui.EndPopup();
-            }
-
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(32 * scale);
-            var centisecondsTillNextStep = s.MillisecondsTillNextStep;
-            if (ImGui.InputInt("##centi", ref centisecondsTillNextStep, 0))
-            {
-                s.MillisecondsTillNextStep = centisecondsTillNextStep * 10;
-                changed = true;
-            }
-
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.BeginTooltip();
-                ImGui.Text("Centiseconds till next step.");
-                ImGui.EndTooltip();
-            }
-
-            ImGui.PopStyleVar();
-            if (ImGui.VSliderInt("##leftMotorPercentage", new Vector2(25 * scale, 50 * scale),
-                ref s.LeftMotorPercentage, 0,
-                100))
-                changed
-                    = true;
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.BeginTooltip();
-                ImGui.Text("Left Motor Strength in %%");
-                ImGui.EndTooltip();
-            }
-
-            ImGui.SameLine();
-            if (ImGui.VSliderInt("##rightMotorPercentage", new Vector2(25 * scale, 50 * scale),
-                ref s.RightMotorPercentage,
-                0, 100))
-                changed
-                    = true;
-            if (ImGui.IsItemHovered())
-            {
-                ImGui.BeginTooltip();
-                ImGui.Text("Right Motor Strength in %%");
-                ImGui.EndTooltip();
-            }
-
-            return changed;
-        }
-
+        
         private static bool DrawHorizontalStep(float scale, VibrationPattern.Step s)
         {
             var changed = false;
@@ -717,9 +659,16 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawDeleteButton(string buttonLabel, Vector2? buttonSize = null, string? tooltipText = null)
+        private static bool DrawDeleteButton(FontAwesomeIcon buttonLabel, Vector2? buttonSize = null, string? tooltipText = null)
         {
-            if (buttonSize is null ? ImGui.Button(buttonLabel) : ImGui.Button(buttonLabel, buttonSize.Value)) ImGui.OpenPopup("Sure?");
+            ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+            ImGui.PushFont(UiBuilder.IconFont);
+            var isButtonPressed = buttonSize is null
+                ? ImGui.Button(buttonLabel.ToIconString())
+                : ImGui.Button(buttonLabel.ToIconString(), buttonSize.Value); 
+            ImGui.PopFont();
+            ImGui.PopStyleColor();
+            if (isButtonPressed) ImGui.OpenPopup("Sure?");
             if (tooltipText is not null && ImGui.IsItemHovered())
             {
                 ImGui.BeginTooltip();
