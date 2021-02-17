@@ -246,6 +246,10 @@ namespace GentleTouch
                 _highestPriorityTrigger = null;
                 _currentEnumerator?.Dispose();
                 _currentEnumerator = null;
+                foreach (var ct in _config.CooldownTriggers)
+                {
+                    ct.ShouldBeTriggered = false;
+                }
                 InitiateOutOfCombatLoop();
                 return;
             }
@@ -307,10 +311,13 @@ namespace GentleTouch
                     .Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
             
             var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown c)[] ?? cooldowns.ToArray();
+            // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
+            // -> We want them to be triggered when leaving the cooldown state!
             foreach (var (t, _) in tuples.Where(it => it.c))
             {
                 if (_highestPriorityTrigger == t)
                 {
+                    // NOTE: Memory leak if not disposed, should exist if _highestPriorityTrigger is set
                     _currentEnumerator!.Dispose();
                     _currentEnumerator = null;
                     _highestPriorityTrigger = null;
@@ -319,6 +326,8 @@ namespace GentleTouch
                 t.ShouldBeTriggered = true;
             }
 
+            // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in 
+            // cooldown state prior), add them to the queue.
             var triggeredTriggers = tuples.Where(it => !it.c && it.t.ShouldBeTriggered).Select(it => it.t);
             var triggers = triggeredTriggers as VibrationCooldownTrigger[] ?? triggeredTriggers.ToArray();
             foreach (var trigger in triggers) trigger.ShouldBeTriggered = false;
