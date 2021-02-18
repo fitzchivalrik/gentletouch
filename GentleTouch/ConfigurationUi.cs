@@ -17,7 +17,7 @@ namespace GentleTouch
     {
         internal static bool DrawConfigUi(Configuration config, DalamudPluginInterface pi,
             Action<IPluginConfiguration> save, IReadOnlyCollection<ClassJob> jobs,
-            IReadOnlyCollection<FFXIVAction> allActions)
+            IReadOnlyCollection<FFXIVAction> allActions, ref IEnumerator<VibrationPattern.Step?>? patternEnumerator)
         {
             var shouldDrawConfigUi = true;
             var changed = false;
@@ -37,25 +37,26 @@ namespace GentleTouch
 
             ImGui.BeginTabBar("ConfigurationTabs", ImGuiTabBarFlags.NoTooltip);
             changed |= DrawGeneralTab(config);
-            changed |= DrawPatternTab(config, scale);
+            changed |= DrawPatternTab(config, scale, ref patternEnumerator);
             changed |= DrawTriggerTab(config, pi, scale, jobs, allActions);
             ImGui.EndTabBar();
             ImGui.End();
             if (!changed) return shouldDrawConfigUi;
-            #if DEBUG
+#if DEBUG
             PluginLog.Verbose("Config changed, saving...");
-            #endif
+#endif
             save(config);
             return shouldDrawConfigUi;
         }
 
-        private static bool DrawOnboarding(Configuration config, IEnumerable<ClassJob> jobs, IEnumerable<FFXIVAction> allActions)
+        private static bool DrawOnboarding(Configuration config, IEnumerable<ClassJob> jobs,
+            IEnumerable<FFXIVAction> allActions)
         {
             var contentSize = ImGui.GetIO().DisplaySize;
             var modalSize = new Vector2(300, 100);
-            var modalPosition = new Vector2(contentSize.X/2 - modalSize.X/2, contentSize.Y/2 - modalSize.Y/2);
-            
-            if(config.OnboardingStep == Onboarding.AskAboutExamplePatterns) 
+            var modalPosition = new Vector2(contentSize.X / 2 - modalSize.X / 2, contentSize.Y / 2 - modalSize.Y / 2);
+
+            if (config.OnboardingStep == Onboarding.AskAboutExamplePatterns)
                 ImGui.OpenPopup("Create Example Patterns");
             var changed = false;
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
@@ -64,18 +65,20 @@ namespace GentleTouch
             {
                 ImGui.Text($"No vibration patterns found." +
                            $"\nCreate some example patterns?");
-                
+
                 if (ImGui.Button("No##ExamplePatterns"))
                 {
                     config.OnboardingStep = Onboarding.Done;
                     changed = true;
                     ImGui.CloseCurrentPopup();
                 }
+
                 ImGui.SameLine();
                 if (ImGui.Button(
                     "Yes##ExamplePatterns"))
                 {
                     #region Example Patterns
+
                     var bothStrong = new VibrationPattern
                     {
                         Steps = new[]
@@ -132,17 +135,18 @@ namespace GentleTouch
                     config.Patterns.Add(leftStrong);
                     config.Patterns.Add(rightStrong);
                     config.Patterns.Add(simpleRhythmic);
+
                     #endregion
 
                     config.OnboardingStep = Onboarding.AskAboutExampleCooldownTriggers;
                     changed = true;
                     ImGui.CloseCurrentPopup();
                 }
-            
+
                 ImGui.EndPopup();
             }
-            
-            if(config.OnboardingStep == Onboarding.AskAboutExampleCooldownTriggers) 
+
+            if (config.OnboardingStep == Onboarding.AskAboutExampleCooldownTriggers)
                 ImGui.OpenPopup("Create Example Cooldown Triggers");
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
             ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
@@ -150,18 +154,20 @@ namespace GentleTouch
             {
                 ImGui.Text($"No cooldown triggers found." +
                            $"\nCreate some example triggers (Ninja and Paladin)?");
-                
+
                 if (ImGui.Button("No##ExampleTriggers"))
                 {
                     config.OnboardingStep = Onboarding.Done;
                     changed = true;
                     ImGui.CloseCurrentPopup();
                 }
+
                 ImGui.SameLine();
                 if (ImGui.Button(
                     "Yes##ExampleTriggers"))
                 {
                     #region Example Triggers
+
                     config.CooldownTriggers.Add(new VibrationCooldownTrigger(
                         30, "Dream Within a Dream", 3566, 16, 0, config.Patterns[1]));
                     config.CooldownTriggers.Add(new VibrationCooldownTrigger(
@@ -170,6 +176,7 @@ namespace GentleTouch
                         30, "Mug", 2248, 18, 2, config.Patterns[3]));
                     config.CooldownTriggers.Add(new VibrationCooldownTrigger(
                         19, "Fight or Flight", 20, 14, 3, config.Patterns[1]));
+
                     #endregion
 
                     config.OnboardingStep = Onboarding.AskAboutGCD;
@@ -180,8 +187,8 @@ namespace GentleTouch
 
                 ImGui.EndPopup();
             }
-            
-            if(config.OnboardingStep == Onboarding.AskAboutGCD) 
+
+            if (config.OnboardingStep == Onboarding.AskAboutGCD)
                 ImGui.OpenPopup("Create GCD Cooldown Triggers");
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
             ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
@@ -189,18 +196,20 @@ namespace GentleTouch
             {
                 ImGui.Text($"No GCD cooldown trigger found." +
                            $"\nCreate a GCD trigger for each job?");
-                
+
                 if (ImGui.Button("No##ExampleGCD"))
                 {
                     config.OnboardingStep = Onboarding.Done;
                     changed = true;
                     ImGui.CloseCurrentPopup();
                 }
+
                 ImGui.SameLine();
                 if (ImGui.Button(
                     "Yes##ExampleGCD"))
                 {
-                    var gcdActionsCollection = allActions.Where(a => a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup);
+                    var gcdActionsCollection =
+                        allActions.Where(a => a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup);
                     var gcdActions = gcdActionsCollection as FFXIVAction[] ?? gcdActionsCollection.ToArray();
                     foreach (var job in jobs)
                     {
@@ -216,6 +225,7 @@ namespace GentleTouch
                                 config.Patterns[1]
                             ));
                     }
+
                     config.OnboardingStep = Onboarding.Done;
                     changed = true;
                     ImGui.CloseCurrentPopup();
@@ -223,7 +233,7 @@ namespace GentleTouch
 
                 ImGui.EndPopup();
             }
-            
+
             return changed;
         }
 
@@ -232,7 +242,7 @@ namespace GentleTouch
             if (config.OnboardingStep == Onboarding.TellAboutRisk) ImGui.OpenPopup("Warning");
             var contentSize = ImGui.GetIO().DisplaySize;
             var modalSize = new Vector2(500, 215);
-            var modalPosition = new Vector2(contentSize.X/2 - modalSize.X/2, contentSize.Y/2 - modalSize.Y/2);
+            var modalPosition = new Vector2(contentSize.X / 2 - modalSize.X / 2, contentSize.Y / 2 - modalSize.Y / 2);
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
             ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
             if (!ImGui.BeginPopupModal("Warning")) return false;
@@ -250,6 +260,7 @@ namespace GentleTouch
                 shouldDrawConfigUi = false;
                 ImGui.CloseCurrentPopup();
             }
+
             ImGui.SameLine();
             if (ImGui.Button(
                 "I hereby acknowledge the risks"))
@@ -258,11 +269,11 @@ namespace GentleTouch
                 changed = true;
                 ImGui.CloseCurrentPopup();
             }
-            
+
             ImGui.EndPopup();
             return changed;
         }
-        
+
         private static bool DrawTriggerTab(Configuration config, DalamudPluginInterface pi, float scale,
             IReadOnlyCollection<ClassJob> jobs, IReadOnlyCollection<FFXIVAction> allActions)
         {
@@ -272,7 +283,7 @@ namespace GentleTouch
             ImGui.EndTabItem();
             return changed;
         }
-        
+
         private static bool DrawCooldownTriggers(Configuration config, float scale, IEnumerable<ClassJob> jobs,
             IReadOnlyCollection<FFXIVAction> allActions)
         {
@@ -292,9 +303,10 @@ namespace GentleTouch
                         firstAction.CooldownGroup,
                         lastTrigger?.Priority + 1 ?? 0,
                         config.Patterns.FirstOrDefault() ?? new VibrationPattern()
-                        ));
+                    ));
                 changed = true;
             }
+
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
             ImGui.Text($"Ordered by priority. To swap, Drag and Drop on");
@@ -305,9 +317,9 @@ namespace GentleTouch
             int[] toSwap = {0, 0};
             //TODO (Chiv) This can be a single item, can't it?
             var toRemoveTrigger = new List<VibrationCooldownTrigger>();
-            
-            const ImGuiTabBarFlags tabBarFlags = ImGuiTabBarFlags.Reorderable 
-                                                 | ImGuiTabBarFlags.TabListPopupButton 
+
+            const ImGuiTabBarFlags tabBarFlags = ImGuiTabBarFlags.Reorderable
+                                                 | ImGuiTabBarFlags.TabListPopupButton
                                                  | ImGuiTabBarFlags.FittingPolicyScroll;
             if (ImGui.BeginTabBar("JobsTabs", tabBarFlags))
             {
@@ -315,8 +327,10 @@ namespace GentleTouch
                 {
                     changed |= DrawJobTabItem(config, scale, allActions, dragDropMarker, job, toSwap, toRemoveTrigger);
                 }
+
                 ImGui.EndTabBar();
             }
+
             if (toSwap[0] != toSwap[1])
             {
                 var t = config.CooldownTriggers[toSwap[0]];
@@ -339,8 +353,10 @@ namespace GentleTouch
         }
 
         private static uint _currentJobTabId = 0;
+
         private static bool DrawJobTabItem(Configuration config, float scale, IEnumerable<FFXIVAction> allActions,
-            FontAwesomeIcon dragDropMarker, ClassJob job, IList<int> toSwap, ICollection<VibrationCooldownTrigger> toRemoveTrigger)
+            FontAwesomeIcon dragDropMarker, ClassJob job, IList<int> toSwap,
+            ICollection<VibrationCooldownTrigger> toRemoveTrigger)
         {
             if (!ImGui.BeginTabItem(job.NameEnglish)) return false;
             var changed = false;
@@ -353,7 +369,7 @@ namespace GentleTouch
             _currentJobTabId = job.RowId;
             var triggerForJob =
                 config.CooldownTriggers.Where(t => t.JobId == _currentJobTabId);
-            var actionsCollection = 
+            var actionsCollection =
                 allActions.Where(a => a.ClassJobCategory.Value.HasClass(job.RowId));
             var actions = actionsCollection as FFXIVAction[] ?? actionsCollection.ToArray();
             foreach (var trigger in triggerForJob)
@@ -371,12 +387,12 @@ namespace GentleTouch
                 if (!DrawDragDropTargetSources(trigger, toSwap))
                 {
                     ImGui.SameLine();
-                    #if DEBUG
+#if DEBUG
                     ImGui.AlignTextToFramePadding();
                     ImGui.Text($"{trigger.Priority + 1:00}");
                     ImGui.SameLine();
                     ImGui.Text($"J:{trigger.JobId:00} A:{trigger.ActionId:0000} ");
-                    #endif
+#endif
                     ImGui.PushItemWidth(135 * scale);
                     ImGui.SameLine();
                     changed |= DrawActionCombo(actions, trigger);
@@ -391,6 +407,7 @@ namespace GentleTouch
                         changed = true;
                     }
                 }
+
                 ImGui.PopID();
             }
 
@@ -411,13 +428,14 @@ namespace GentleTouch
                     var ptr = new IntPtr(&prio);
                     ImGui.SetDragDropPayload(payloadIdentifier, ptr, sizeof(int));
                 }
+
                 ImGui.SameLine();
                 ImGui.AlignTextToFramePadding();
-                #if DEBUG
+#if DEBUG
                 ImGui.Text($"{trigger.Priority + 1} Dragging {trigger.ActionName}.");
-                #else
+#else
                 ImGui.Text($"Dragging {trigger.ActionName}.");
-                #endif
+#endif
                 ImGui.EndDragDropSource();
                 return true;
             }
@@ -435,16 +453,18 @@ namespace GentleTouch
                     toSwap[1] = trigger.Priority;
                 }
             }
+
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
-            #if DEBUG
+#if DEBUG
             ImGui.Text($"{trigger.Priority + 1} Swap with {trigger.ActionName}");
-            #else
+#else
             ImGui.Text($"Swap with {trigger.ActionName}");
-            #endif
+#endif
             ImGui.EndDragDropTarget();
             return true;
         }
+
         private static bool DrawPatternCombo(IEnumerable<VibrationPattern> patterns, VibrationCooldownTrigger trigger)
         {
             if (!ImGui.BeginCombo($"##Pattern{trigger.Priority}", trigger.Pattern.Name)) return false;
@@ -469,11 +489,13 @@ namespace GentleTouch
         private static bool DrawActionCombo(IEnumerable<FFXIVAction> actions, VibrationCooldownTrigger trigger)
         {
             if (!ImGui.BeginCombo($"##Action{trigger.Priority}",
-                #if DEBUG
-                trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? $"{trigger.ActionName} (GCD)" : trigger.ActionName
-                #else
+#if DEBUG
+                    trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup
+                        ? $"{trigger.ActionName} (GCD)"
+                        : trigger.ActionName
+#else
                 trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : trigger.ActionName
-                #endif
+#endif
                 )
             ) return false;
             var changed = false;
@@ -481,11 +503,11 @@ namespace GentleTouch
             {
                 var isSelected = a.RowId == trigger.ActionId;
                 if (ImGui.Selectable(
-                    #if DEBUG
+#if DEBUG
                     a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? $"{a.Name} (GCD)" : a.Name,
-                    #else
+#else
                     a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : a.Name,
-                    #endif
+#endif
                     isSelected))
                 {
                     trigger.ActionId = a.RowId;
@@ -496,15 +518,14 @@ namespace GentleTouch
 
                 if (isSelected) ImGui.SetItemDefaultFocus();
             }
+
             ImGui.EndCombo();
             return changed;
         }
-        
-        
 
-        private static bool DrawPatternTab(Configuration config, float scale)
+        private static bool DrawPatternTab(Configuration config, float scale, ref IEnumerator<VibrationPattern.Step?>? patternEnumerator)
         {
-            if (!ImGui.BeginTabItem("Patterns")) return false;
+            if (!ImGui.BeginTabItem("Patterns")) { return false; }
             var changed = false;
             const string importExportPrefix = "GTP";
             if (ImGui.Button("Add new Pattern"))
@@ -512,6 +533,7 @@ namespace GentleTouch
                 config.Patterns.Add(new VibrationPattern());
                 changed = true;
             }
+
             ImGui.SameLine();
             if (ImGui.Button("Import from clipboard"))
             {
@@ -536,6 +558,7 @@ namespace GentleTouch
                     // ignored
                 }
             }
+
             ImGui.Separator();
             //TODO (Chiv) Single Item suffice?
             var toRemovePatterns = new List<VibrationPattern>();
@@ -547,16 +570,35 @@ namespace GentleTouch
                     toRemovePatterns.Add(pattern);
                     changed = true;
                 }
-
                 ImGui.SameLine();
-                var open = ImGui.TreeNodeEx($"{pattern.Name}###{pattern.Guid}", ImGuiTreeNodeFlags.AllowItemOverlap);
-                ImGui.SameLine(225);
-                if(ImGui.Button("Export to clipboard"))
+                ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+                ImGui.PushFont(UiBuilder.IconFont);
+                if (ImGui.Button(FontAwesomeIcon.Play.ToIconString()))
+                {
+                    var p = new VibrationPattern()
+                    {
+                        Cycles = pattern.Infinite ? 10 : pattern.Cycles,
+                        Infinite = false,
+                        Steps = pattern.Steps,
+                        Name = pattern.Name
+                    };
+                    patternEnumerator = p.GetEnumerator();
+                }
+                ImGui.PopFont();
+                ImGui.PopStyleColor();
+                ImGui.SameLine();
+                var open = ImGui.TreeNodeEx($"{pattern.Name}###{pattern.Guid}", ImGuiTreeNodeFlags.AllowItemOverlap | ImGuiTreeNodeFlags.Bullet);
+              //  ImGui.SameLine(225);
+              
+                ImGui.SameLine(300);
+                
+                if (ImGui.Button("Export to clipboard"))
                 {
                     var jsonOutput = JsonConvert.SerializeObject(pattern);
                     if (jsonOutput is not null)
                     {
-                        var prefixedBase64 = $"{importExportPrefix}{Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonOutput))}";
+                        var prefixedBase64 =
+                            $"{importExportPrefix}{Convert.ToBase64String(Encoding.UTF8.GetBytes(jsonOutput))}";
                         ImGui.SetClipboardText(prefixedBase64);
                     }
                 }
@@ -565,6 +607,7 @@ namespace GentleTouch
                     changed |= DrawPatternGenerals(pattern);
                     changed |= DrawPatternSteps(scale, pattern);
                 }
+
                 ImGui.Separator();
                 ImGui.PopID();
             }
@@ -578,11 +621,13 @@ namespace GentleTouch
         {
             var changed = false;
             ImGui.PushFont(UiBuilder.IconFont);
-            if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##PatternStep", new Vector2(23*scale, 23*scale)))
+            if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##PatternStep",
+                new Vector2(23 * scale, 23 * scale)))
             {
                 pattern.Steps.Add(new VibrationPattern.Step(0, 0));
                 changed = true;
             }
+
             ImGui.PopFont();
             // TODO  (Chiv) Single item suffice?
             var toRemoveSteps = new List<int>();
@@ -592,26 +637,28 @@ namespace GentleTouch
             // TODO (Chiv) Ability to hide steps needed/desired?
             //if (ImGui.TreeNodeEx($"Steps", ImGuiTreeNodeFlags.DefaultOpen))
             //{
-                for (var i = 0; i < pattern.Steps.Count; i++)
+            for (var i = 0; i < pattern.Steps.Count; i++)
+            {
+                ImGui.PushID(i);
+                var s = pattern.Steps[i];
+                ImGui.AlignTextToFramePadding();
+                ImGui.Text($"{i + 1}");
+                ImGui.SameLine();
+                changed |= DrawHorizontalStep(scale, s);
+                ImGui.SameLine();
+                if (DrawDeleteButton(FontAwesomeIcon.TrashAlt,
+                    new Vector2(23 * scale, 23 * scale),
+                    "Delete this Step."))
                 {
-                    ImGui.PushID(i);
-                    var s = pattern.Steps[i];
-                    ImGui.AlignTextToFramePadding();
-                    ImGui.Text($"{i + 1}");
-                    ImGui.SameLine();
-                    changed |= DrawHorizontalStep(scale, s);
-                    ImGui.SameLine();
-                    if (DrawDeleteButton(FontAwesomeIcon.TrashAlt,
-                        new Vector2(23 * scale, 23 * scale),
-                        "Delete this Step."))
-                    {
-                        toRemoveSteps.Add(i);
-                        changed = true;
-                    }
-                    //changed = DrawVerticalStep(scale, toRemoveSteps, i, s);
-                    ImGui.PopID();
+                    toRemoveSteps.Add(i);
+                    changed = true;
                 }
-                // ImGui.TreePop();
+
+                //changed = DrawVerticalStep(scale, toRemoveSteps, i, s);
+                ImGui.PopID();
+            }
+
+            // ImGui.TreePop();
             //}
             foreach (var i in toRemoveSteps) pattern.Steps.RemoveAt(i);
             ImGui.TreePop();
@@ -620,10 +667,10 @@ namespace GentleTouch
 
         private static bool DrawPatternGenerals(VibrationPattern pattern)
         {
-            #if DEBUG
+#if DEBUG
             ImGui.Text($"UUID: {pattern.Guid}");
             if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) ImGui.SetClipboardText(pattern.Guid.ToString());
-            #endif
+#endif
             var changed = false;
             ImGui.SetNextItemWidth(175);
             var n = pattern.Name == "Nameless" ? "" : pattern.Name;
@@ -641,7 +688,7 @@ namespace GentleTouch
             if (ImGui.InputInt("Cycles", ref pattern.Cycles, 1)) changed = true;
             return changed;
         }
-        
+
         private static bool DrawHorizontalStep(float scale, VibrationPattern.Step s)
         {
             var changed = false;
@@ -659,13 +706,14 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawDeleteButton(FontAwesomeIcon buttonLabel, Vector2? buttonSize = null, string? tooltipText = null)
+        private static bool DrawDeleteButton(FontAwesomeIcon buttonLabel, Vector2? buttonSize = null,
+            string? tooltipText = null)
         {
             ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
             ImGui.PushFont(UiBuilder.IconFont);
             var isButtonPressed = buttonSize is null
                 ? ImGui.Button(buttonLabel.ToIconString())
-                : ImGui.Button(buttonLabel.ToIconString(), buttonSize.Value); 
+                : ImGui.Button(buttonLabel.ToIconString(), buttonSize.Value);
             ImGui.PopFont();
             ImGui.PopStyleColor();
             if (isButtonPressed) ImGui.OpenPopup("Sure?");
