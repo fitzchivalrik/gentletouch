@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Actors;
 using Dalamud.Game.ClientState.Actors.Types;
@@ -49,7 +50,7 @@ namespace GentleTouch
         {
             "Aether Current",
             "Windätherquelle",
-            "vent éthéré",
+            "Vent éthéré",
             "風脈の泉"
         };
 
@@ -289,8 +290,8 @@ namespace GentleTouch
                     from Actor a in _pluginInterface.ClientState.Actors
                     where a is not null
                         && a.ObjectKind == ObjectKind.EventObj
-                        && _aetherCurrentNameWhitelist.Contains(a.Name)
-                        && Marshal.ReadByte(a.Address, 0x105) != 0
+                        && _aetherCurrentNameWhitelist.Contains(Encoding.UTF8.GetString(Encoding.Default.GetBytes(a.Name)))
+                        && Marshal.ReadByte(a.Address, 0x105) == 0
                     select (float?) Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
                                               + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)
                                               + Math.Pow(localPlayer.Position.Z - a.Position.Z, 2))

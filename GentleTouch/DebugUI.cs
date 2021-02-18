@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Text;
 using Dalamud.Game.ClientState.Actors;
 using ImGuiNET;
 
@@ -69,31 +70,46 @@ namespace GentleTouch
             
             var localPlayer = _pluginInterface.ClientState.LocalPlayer;
             ImGui.Text($"CurrentEnumerator: {_currentEnumerator}");
+            foreach (var name in _aetherCurrentNameWhitelist)
+            {
+                ImGui.Text(name);
+                var bytes = Encoding.UTF8.GetBytes(name);
+                for (var j = 0; j < bytes.Length; j++)
+                {
+                    if(j != 0) ImGui.SameLine();
+                    ImGui.Text($"{bytes[j]}");
+                }
+            }
             for(var i = 0; i < _pluginInterface.ClientState.Actors.Length; i ++)
             {
                 var actor = _pluginInterface.ClientState.Actors[i];
                 if  (actor is null) continue;
                 if (actor.ObjectKind != ObjectKind.EventObj) continue;
-                if (!_aetherCurrentNameWhitelist.Contains(actor.Name)) continue;
+                //if (!_aetherCurrentNameWhitelist.Contains(actor.Name)) continue;
                 // IF set (!=0), its invisible
                 var visible = Marshal.ReadByte(actor.Address, 0x105);
                 var direction = _pluginInterface.ClientState.LocalPlayer.Position.Z - actor.Position.Z > 3
                     ? "DOWN"
                     : "UP";
-                ImGui.Text($"{actor.ActorId}:{actor.Name}" +
-                           $" ({actor.Position.X},{actor.Position.Y},{actor.Position.Z})" +
-                           $" ({actor.Rotation})" +
-                           $" ({actor.YalmDistanceX},{actor.YalmDistanceY})" +
-                           $" {direction}" +
-                           $" RenderMode {visible:X}");
-
-                if(!_config.SenseAetherCurrents) continue;
-                if (!_pluginInterface.Framework.Gui.WorldToScreen(actor.Position, out var screenCoords)) continue;
                 var actualDistance = actor.YalmDistanceX != 0
                     ? actor.YalmDistanceX
                     : Math.Sqrt(Math.Pow(localPlayer.Position.X - actor.Position.X, 2)
                                 + Math.Pow(localPlayer.Position.Y - actor.Position.Y, 2)
                                 + Math.Pow(localPlayer.Position.Z - actor.Position.Z, 2));
+
+                //TODO So long dalamud is not fixed
+                var actorName = Encoding.UTF8.GetString(Encoding.Default.GetBytes(actor.Name));
+                ImGui.Text($"{actor.ActorId}:{actorName}" +
+                           $" ({actor.Position.X},{actor.Position.Y},{actor.Position.Z})" +
+                           $" ({actor.Rotation})" +
+                           $" ({actor.YalmDistanceX},{actor.YalmDistanceY})" +
+                           $" {direction}" +
+                           $" RenderMode {visible:X}" +
+                           $" Dis {actualDistance}");
+
+                if(!_config.SenseAetherCurrents) continue;
+                if (!_pluginInterface.Framework.Gui.WorldToScreen(actor.Position, out var screenCoords)) continue;
+                
                 if (actualDistance > _config.MaxAetherCurrentSenseDistance)
                     continue;
                 ImGui.PushID(i);
@@ -107,7 +123,7 @@ namespace GentleTouch
                     ImGuiWindowFlags.NoMouseInputs |
                     ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav)) {
                     ImGui.Text(
-                        $"{actor.Address.ToInt64():X}-{actor.ActorId:X}[{i}] - {actor.ObjectKind} - {actor.Name} - {actualDistance} RenderMode {visible:X}");
+                        $"{actor.Address.ToInt64():X}-{actor.ActorId:X}[{i}] - {actor.ObjectKind} - {actorName} - {actualDistance} RenderMode {visible:X}");
                     ImGui.End();
                 }
                 ImGui.PopID();
