@@ -723,6 +723,7 @@ namespace GentleTouch
                 ImGui.Text(tooltipText);
                 ImGui.EndTooltip();
             }
+
             if (!ImGui.BeginPopup("Sure?")) return false;
             var consent = false;
             ImGui.Text("Really delete?");
@@ -731,15 +732,35 @@ namespace GentleTouch
                 consent = true;
                 ImGui.CloseCurrentPopup();
             }
+
             ImGui.EndPopup();
             return consent;
         }
-        
+
         private static bool DrawGeneralTab(Configuration config)
         {
             if (!ImGui.BeginTabItem("General")) return false;
-            var changed = ImGui.Checkbox("Disable cooldown trigger while casting.", ref config.NoVibrationDuringCasting);
-            changed |= ImGui.Checkbox("Disable cooldown trigger while weapon is sheathed.", ref config.NoVibrationWithSheathedWeapon);
+            var changed = ImGui.Checkbox("Disable cooldown trigger while casting.",
+                ref config.NoVibrationDuringCasting);
+            changed |= ImGui.Checkbox("Disable cooldown trigger while weapon is sheathed.",
+                ref config.NoVibrationWithSheathedWeapon);
+            changed |= ImGui.Checkbox("Sense Aether Currents (out of combat).", ref config.SenseAetherCurrents);
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.BeginTooltip();
+                ImGui.Text($"Gradually stronger vibration the closer you are to an Aether Current.");
+                ImGui.EndTooltip();
+            }
+
+            if (config.SenseAetherCurrents)
+            {
+                ImGui.Indent();
+                ImGui.SetNextItemWidth(250);
+                changed |= ImGui.SliderInt("##AetherSenseDistance", ref config.MaxAetherCurrentSenseDistance, 5, 115,
+                    "%d Max Sense Distance");
+                ImGui.Unindent();
+            }
+
             ImGui.EndTabItem();
             return changed;
         }

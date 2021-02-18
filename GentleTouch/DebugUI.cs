@@ -1,5 +1,7 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Numerics;
 using System.Runtime.InteropServices;
+using Dalamud.Game.ClientState.Actors;
 using ImGuiNET;
 
 #if DEBUG
@@ -10,6 +12,8 @@ namespace GentleTouch
         private void DrawDebugUi()
         {
             if(!ImGui.Begin($"{PluginName} Debug")) return;
+            
+            
             ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
             ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
             foreach (var i in _lastReturnedFromPoll)
@@ -61,7 +65,53 @@ namespace GentleTouch
             ImGui.Text($"Cooldown Total: {cooldown.CooldownTotal}");
             ImGui.Text($"IsCooldown: {cooldown.IsCooldown}");
             ImGui.Text($"ActionID: {cooldown.ActionID}");
+            ImGui.Separator();
+            
+            var localPlayer = _pluginInterface.ClientState.LocalPlayer;
+            ImGui.Text($"CurrentEnumerator: {_currentEnumerator}");
+            for(var i = 0; i < _pluginInterface.ClientState.Actors.Length; i ++)
+            {
+                var actor = _pluginInterface.ClientState.Actors[i];
+                if  (actor is null) continue;
+                if (actor.ObjectKind != ObjectKind.EventObj) continue;
+                if (!_aetherCurrentNameWhitelist.Contains(actor.Name)) continue;
+                // IF set (!=0), its invisible
+                var visible = Marshal.ReadByte(actor.Address, 0x105);
+                var direction = _pluginInterface.ClientState.LocalPlayer.Position.Z - actor.Position.Z > 3
+                    ? "DOWN"
+                    : "UP";
+                ImGui.Text($"{actor.ActorId}:{actor.Name}" +
+                           $" ({actor.Position.X},{actor.Position.Y},{actor.Position.Z})" +
+                           $" ({actor.Rotation})" +
+                           $" ({actor.YalmDistanceX},{actor.YalmDistanceY})" +
+                           $" {direction}" +
+                           $" RenderMode {visible:X}");
 
+                if(!_config.SenseAetherCurrents) continue;
+                if (!_pluginInterface.Framework.Gui.WorldToScreen(actor.Position, out var screenCoords)) continue;
+                var actualDistance = actor.YalmDistanceX != 0
+                    ? actor.YalmDistanceX
+                    : Math.Sqrt(Math.Pow(localPlayer.Position.X - actor.Position.X, 2)
+                                + Math.Pow(localPlayer.Position.Y - actor.Position.Y, 2)
+                                + Math.Pow(localPlayer.Position.Z - actor.Position.Z, 2));
+                if (actualDistance > _config.MaxAetherCurrentSenseDistance)
+                    continue;
+                ImGui.PushID(i);
+                ImGui.SetNextWindowPos(new Vector2(screenCoords.X, screenCoords.Y));
+                ImGui.SetNextWindowBgAlpha(
+                    (float)Math.Max(1 - (actualDistance / _config.MaxAetherCurrentSenseDistance), 0.2));
+                if (ImGui.Begin("Actor" + i,
+                    ImGuiWindowFlags.NoDecoration |
+                    ImGuiWindowFlags.AlwaysAutoResize |
+                    ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoMove |
+                    ImGuiWindowFlags.NoMouseInputs |
+                    ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav)) {
+                    ImGui.Text(
+                        $"{actor.Address.ToInt64():X}-{actor.ActorId:X}[{i}] - {actor.ObjectKind} - {actor.Name} - {actualDistance} RenderMode {visible:X}");
+                    ImGui.End();
+                }
+                ImGui.PopID();
+            }
 
             ImGui.End();
         }

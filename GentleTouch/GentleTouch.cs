@@ -2,19 +2,17 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using Dalamud.Game.ClientState;
+using Dalamud.Game.ClientState.Actors;
+using Dalamud.Game.ClientState.Actors.Types;
 using Dalamud.Game.Command;
 using Dalamud.Game.Internal;
 using Dalamud.Hooking;
 using Dalamud.Plugin;
 using GentleTouch.Collection;
 using Lumina.Excel.GeneratedSheets;
-using Lumina.Text;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
-// TODO 3 WRite new onboarding with (i) creation of example triggers and (ii) GCD creation for all
-// TODO 4 Change JobId to uint in VibrationCooldownTrigger
 // TODO 5 Refactor DrawCombo to generic
 namespace GentleTouch
 {
@@ -23,7 +21,7 @@ namespace GentleTouch
         private const string Command = "/gentle";
         public const string PluginName = "GentleTouch";
 
-        private static readonly string[] JobsWhitelist =
+        private static readonly HashSet<string> JobsWhitelist = new()
         {
             "warrior",
             "paladin",
@@ -44,6 +42,15 @@ namespace GentleTouch
             "blue mage",
             "summoner",
             "sage"
+        };
+
+        //TODO Other languages
+        private readonly HashSet<string> _aetherCurrentNameWhitelist = new()
+        {
+            "Aether Current",
+            "Windätherquelle",
+            "vent éthéré",
+            "風脈の泉"
         };
 
         // TODO (Chiv): Check Right and Left Motor for x360/XOne Gamepad
@@ -84,6 +91,7 @@ namespace GentleTouch
 #endif
 
         private nint _maybeControllerStruct;
+
         private bool _shouldDrawConfigUi =
 #if DEBUG
                 true
@@ -121,8 +129,8 @@ namespace GentleTouch
             const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
 
             #endregion
-            
-            
+
+
             _pluginInterface = pi;
             _config = config;
             // NOTE (Chiv) Resolve pattern GUIDs to pattern
@@ -133,9 +141,15 @@ namespace GentleTouch
                 trigger.Pattern = _config.Patterns.FirstOrDefault(p => p.Guid == trigger.PatternGuid) ??
                                   new VibrationPattern();
             }
-            _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
-            _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
-            _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
+
+            _pluginInterface.ClientState.OnLogin += OnLogin;
+            _pluginInterface.ClientState.OnLogout += OnLogout;
+#if DEBUG
+            if (_pluginInterface.ClientState.LocalPlayer is not null)
+            {
+                OnLogin(null!, null!);
+            }
+#endif
 
             #region Hooks, Functions and Addresses
 
@@ -160,7 +174,8 @@ namespace GentleTouch
                 .Where(j => JobsWhitelist.Contains(j.Name))
                 .ToArray();
             var actions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
-                .Where(a => a.IsPlayerAction && a.CooldownGroup != VibrationCooldownTrigger.GCDCooldownGroup && !a.IsPvP);
+                .Where(a => a.IsPlayerAction && a.CooldownGroup != VibrationCooldownTrigger.GCDCooldownGroup &&
+                            !a.IsPvP);
             var gcdActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
                 // NOTE the ClassJobCategory.Name.Length is a hack,
                 // as every Job (not class!) has up to two GCDs:
@@ -176,7 +191,7 @@ namespace GentleTouch
                 );
             var allActions = actions.Concat(gcdActions);
             _allActions = allActions as FFXIVAction[] ?? allActions.ToArray();
-            
+
             #region BreakingConfigurationVersionMigration
 
             //TODO Remove before v1.0
@@ -187,7 +202,7 @@ namespace GentleTouch
                 {
                     config.OnboardingStep = Onboarding.Done;
                 }
-                
+
                 // GCD Migration
                 var gcdTrigger = _config.CooldownTriggers.FirstOrDefault(t => t.JobId == 0);
                 if (gcdTrigger is not null)
@@ -217,9 +232,7 @@ namespace GentleTouch
                 _pluginInterface.SavePluginConfig(_config);
             }
 
-
             #endregion
-
 
             #endregion
 
@@ -230,11 +243,81 @@ namespace GentleTouch
             });
         }
 
+        private void OnLogout(object sender, EventArgs e)
+        {
+            _pluginInterface.UiBuilder.OnOpenConfigUi -= OnOpenConfigUi;
+            _pluginInterface.UiBuilder.OnBuildUi -= BuildUi;
+            _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
+            _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+            _currentEnumerator?.Dispose();
+            _currentEnumerator = null;
+            _highestPriorityTrigger = null;
+            _queue.Clear();
+        }
+
+        private void OnLogin(object sender, EventArgs e)
+        {
+            _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
+            _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
+            _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
+            _currentEnumerator = GetAetherCurrentSenseEnumerator();
+        }
+
+        private IEnumerator<VibrationPattern.Step?> GetAetherCurrentSenseEnumerator()
+        {
+            var step = new VibrationPattern.Step(15, 15);
+            var zeroStep = new VibrationPattern.Step(0, 0);
+            var nextTimeStep = 0L;
+            while (true)
+            {
+                while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
+                    yield return null;
+                if (!_config.SenseAetherCurrents)
+                {
+                    yield return null;
+                    continue;
+                }
+
+                var localPlayer = _pluginInterface.ClientState.LocalPlayer;
+                if (localPlayer is null)
+                {
+                    yield return null;
+                    continue;
+                }
+                
+                var distance = (
+                    from Actor a in _pluginInterface.ClientState.Actors
+                    where a is not null
+                        && a.ObjectKind == ObjectKind.EventObj
+                        && _aetherCurrentNameWhitelist.Contains(a.Name)
+                        && Marshal.ReadByte(a.Address, 0x105) != 0
+                    select (float?) Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
+                                              + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)
+                                              + Math.Pow(localPlayer.Position.Z - a.Position.Z, 2))
+                ).Min() ?? float.MaxValue;
+                if (distance > _config.MaxAetherCurrentSenseDistance)
+                {
+                    yield return null;
+                    continue;
+                }
+                nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 200;
+                yield return step;
+                while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
+                    yield return null;
+                // Silence after the vibration depending on distance to Aether Current
+                var msTillNextStep = Math.Max((long) (800L * (distance / _config.MaxAetherCurrentSenseDistance)),
+                    10L);
+                nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + msTillNextStep;
+                yield return zeroStep;
+            }
+        }
+
         private void FrameworkInCombatUpdate(Framework framework)
         {
             void InitiateOutOfCombatLoop()
             {
                 ControllerSetState(0, 0);
+                _currentEnumerator = GetAetherCurrentSenseEnumerator();
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
             }
@@ -250,17 +333,19 @@ namespace GentleTouch
                 {
                     ct.ShouldBeTriggered = false;
                 }
+
                 InitiateOutOfCombatLoop();
                 return;
             }
 
             var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                            !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+                                 !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
             if (weaponSheathed)
             {
                 InitiateOutOfCombatLoop();
                 return;
             }
+
             var casting = _config.NoVibrationDuringCasting &&
                           _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
             if (casting)
@@ -268,8 +353,8 @@ namespace GentleTouch
                 InitiateOutOfCombatLoop();
                 return;
             }
-            
-            UpdateQueue();
+
+            EnqueueCooldownTriggers();
             UpdateHighestPriorityTrigger();
             CheckAndVibrate();
         }
@@ -280,7 +365,10 @@ namespace GentleTouch
             if (_currentEnumerator.MoveNext())
             {
                 var s = _currentEnumerator.Current;
-                if (s is not null) ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
+                if (s is not null)
+                {
+                    ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
+                }
             }
             else
             {
@@ -298,18 +386,18 @@ namespace GentleTouch
             if (_highestPriorityTrigger?.Pattern.Infinite ?? false) _highestPriorityTrigger.ShouldBeTriggered = true;
             _currentEnumerator?.Dispose();
             _highestPriorityTrigger = _queue.Dequeue();
-            _currentEnumerator = _highestPriorityTrigger.Pattern.GetEnumerator();
+            _currentEnumerator = _highestPriorityTrigger.GetEnumerator();
             ControllerSetState(0, 0);
         }
 
-        private void UpdateQueue()
+        private void EnqueueCooldownTriggers()
         {
             //TODO (Chiv) Proper Switch for trigger types
             var cooldowns =
                 _config.CooldownTriggers
                     .Where(t => t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
                     .Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
-            
+
             var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown c)[] ?? cooldowns.ToArray();
             // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
             // -> We want them to be triggered when leaving the cooldown state!
@@ -323,6 +411,7 @@ namespace GentleTouch
                     _highestPriorityTrigger = null;
                     ControllerSetState(0, 0);
                 }
+
                 t.ShouldBeTriggered = true;
             }
 
@@ -337,13 +426,21 @@ namespace GentleTouch
         private void FrameworkOutOfCombatUpdate(Framework framework)
         {
             var inCombat = _pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? false;
-            if (!inCombat) return;
+            if (!inCombat)
+            {
+                CheckAndVibrate();
+                return;
+            }
+
+            ;
             var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                            !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+                                 !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
             if (weaponSheathed) return;
             var casting = _config.NoVibrationDuringCasting &&
                           _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
             if (casting) return;
+            _currentEnumerator = null;
+            ControllerSetState(0, 0);
             _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
         }
@@ -371,7 +468,7 @@ namespace GentleTouch
         private int ControllerPollDetour(nint maybeControllerStruct)
         {
             _maybeControllerStruct = maybeControllerStruct;
-#if DEBUG
+#if !DEBUG
             var original = _controllerPoll.Original(maybeControllerStruct);
             _lastReturnedFromPoll[_currentIndex++ % _lastReturnedFromPoll.Length] = original;
             // TODO (Chiv) Interpretation happens inside method, log appears after map (0x40 = Square/X)
@@ -390,7 +487,7 @@ namespace GentleTouch
         {
             _shouldDrawConfigUi = _shouldDrawConfigUi &&
                                   ConfigurationUi.DrawConfigUi(_config, _pluginInterface,
-                                      _pluginInterface.SavePluginConfig, _jobs, _allActions);
+                                      _pluginInterface.SavePluginConfig, _jobs, _allActions, ref _currentEnumerator);
 
 #if DEBUG
             DrawDebugUi();
@@ -419,10 +516,9 @@ namespace GentleTouch
             {
                 // TODO (Chiv) Still not quite sure about correct dispose
                 // NOTE (Chiv) Explicit, non GC? call - remove managed thingies too.
-                _pluginInterface.UiBuilder.OnOpenConfigUi -= OnOpenConfigUi;
-                _pluginInterface.UiBuilder.OnBuildUi -= BuildUi;
-                _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
-                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+                OnLogout(null!, null!);
+                _pluginInterface.ClientState.OnLogin -= OnLogin;
+                _pluginInterface.ClientState.OnLogout -= OnLogout;
                 _pluginInterface.CommandManager.RemoveHandler(Command);
             }
 

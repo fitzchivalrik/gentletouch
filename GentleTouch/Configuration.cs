@@ -10,9 +10,11 @@ namespace GentleTouch
 
         public bool RisksAcknowledged;
         
+        public Onboarding OnboardingStep;
         public bool NoVibrationWithSheathedWeapon;
         public bool NoVibrationDuringCasting;
-        public Onboarding OnboardingStep;
+        public bool SenseAetherCurrents;
+        public int MaxAetherCurrentSenseDistance = 100;
 
         public int Version { get; set; } = 1;
     }

@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using Dalamud.Plugin;
 using Newtonsoft.Json;
 
 namespace GentleTouch
@@ -18,6 +20,11 @@ namespace GentleTouch
         internal VibrationTrigger(int priority, Guid patternGuid)
         {
             (Priority, PatternGuid) = (priority, patternGuid);
+        }
+
+        protected internal virtual IEnumerator<VibrationPattern.Step?> GetEnumerator()
+        {
+            return Pattern.GetEnumerator();
         }
     }
 
@@ -47,4 +54,5 @@ namespace GentleTouch
                 = (jobId, actionName, actionId, actionCooldownGroup);
         }
     }
+    
 }
