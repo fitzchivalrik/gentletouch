@@ -12,6 +12,8 @@ namespace GentleTouch
     {
         private void DrawDebugUi()
         {
+            //ImGui.PushStyleColor(ImGuiCol.WindowBg, 0xFF000000);
+            ImGui.SetNextWindowBgAlpha(1);
             if(!ImGui.Begin($"{PluginName} Debug")) return;
             
             
@@ -70,16 +72,7 @@ namespace GentleTouch
             
             var localPlayer = _pluginInterface.ClientState.LocalPlayer;
             ImGui.Text($"CurrentEnumerator: {_currentEnumerator}");
-            foreach (var name in _aetherCurrentNameWhitelist)
-            {
-                ImGui.Text(name);
-                var bytes = Encoding.UTF8.GetBytes(name);
-                for (var j = 0; j < bytes.Length; j++)
-                {
-                    if(j != 0) ImGui.SameLine();
-                    ImGui.Text($"{bytes[j]}");
-                }
-            }
+            
             for(var i = 0; i < _pluginInterface.ClientState.Actors.Length; i ++)
             {
                 var actor = _pluginInterface.ClientState.Actors[i];
@@ -97,7 +90,7 @@ namespace GentleTouch
                                 + Math.Pow(localPlayer.Position.Y - actor.Position.Y, 2)
                                 + Math.Pow(localPlayer.Position.Z - actor.Position.Z, 2));
 
-                //TODO So long dalamud is not fixed
+                //TODO So long as its not fixed in Dalamud
                 var actorName = Encoding.UTF8.GetString(Encoding.Default.GetBytes(actor.Name));
                 ImGui.Text($"{actor.ActorId}:{actorName}" +
                            $" ({actor.Position.X},{actor.Position.Y},{actor.Position.Z})" +

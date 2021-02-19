@@ -15,6 +15,7 @@ using Lumina.Excel.GeneratedSheets;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 // TODO 5 Refactor DrawCombo to generic
+// TODO 6 All SetItemWidths etc. times scale (Imgui.GetIO.FontGlobalScale)
 namespace GentleTouch
 {
     public partial class GentleTouch : IDisposable
@@ -268,11 +269,8 @@ namespace GentleTouch
         {
             var step = new VibrationPattern.Step(15, 15);
             var zeroStep = new VibrationPattern.Step(0, 0);
-            var nextTimeStep = 0L;
             while (true)
             {
-                while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
-                    yield return null;
                 if (!_config.SenseAetherCurrents)
                 {
                     yield return null;
@@ -291,6 +289,7 @@ namespace GentleTouch
                     where a is not null
                         && a.ObjectKind == ObjectKind.EventObj
                         && _aetherCurrentNameWhitelist.Contains(Encoding.UTF8.GetString(Encoding.Default.GetBytes(a.Name)))
+                        // NOTE: This byte is SET(!=0) if _invisible_ i.e. if the player already collected
                         && Marshal.ReadByte(a.Address, 0x105) == 0
                     select (float?) Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
                                               + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)
@@ -301,15 +300,17 @@ namespace GentleTouch
                     yield return null;
                     continue;
                 }
-                nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 200;
+                var nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 200;
                 yield return step;
                 while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
                     yield return null;
-                // Silence after the vibration depending on distance to Aether Current
+                // Silence after the vibration depends on distance to Aether Current
                 var msTillNextStep = Math.Max((long) (800L * (distance / _config.MaxAetherCurrentSenseDistance)),
                     10L);
                 nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + msTillNextStep;
                 yield return zeroStep;
+                while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
+                    yield return null;
             }
         }
 
@@ -429,6 +430,8 @@ namespace GentleTouch
             var inCombat = _pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? false;
             if (!inCombat)
             {
+                if (_config.SenseAetherCurrents && _currentEnumerator is null)
+                    _currentEnumerator = GetAetherCurrentSenseEnumerator();
                 CheckAndVibrate();
                 return;
             }
@@ -489,7 +492,6 @@ namespace GentleTouch
             _shouldDrawConfigUi = _shouldDrawConfigUi &&
                                   ConfigurationUi.DrawConfigUi(_config, _pluginInterface,
                                       _pluginInterface.SavePluginConfig, _jobs, _allActions, ref _currentEnumerator);
-
 #if DEBUG
             DrawDebugUi();
 #endif
