@@ -6,6 +6,8 @@ using System.Text;
 using Dalamud.Configuration;
 using Dalamud.Interface;
 using Dalamud.Plugin;
+using GentleTouch.Interop;
+using GentleTouch.Triggers;
 using ImGuiNET;
 using Lumina.Excel.GeneratedSheets;
 using Newtonsoft.Json;
@@ -168,13 +170,13 @@ namespace GentleTouch
                 {
                     #region Example Triggers
 
-                    config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    config.CooldownTriggers.Add(new CooldownTrigger(
                         30, "Dream Within a Dream", 3566, 16, 0, config.Patterns[1]));
-                    config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    config.CooldownTriggers.Add(new CooldownTrigger(
                         30, "Shadow Fang", 2257, 10, 1, config.Patterns[2]));
-                    config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    config.CooldownTriggers.Add(new CooldownTrigger(
                         30, "Mug", 2248, 18, 2, config.Patterns[3]));
-                    config.CooldownTriggers.Add(new VibrationCooldownTrigger(
+                    config.CooldownTriggers.Add(new CooldownTrigger(
                         19, "Fight or Flight", 20, 14, 3, config.Patterns[1]));
 
                     #endregion
@@ -209,14 +211,14 @@ namespace GentleTouch
                     "Yes##ExampleGCD"))
                 {
                     var gcdActionsCollection =
-                        allActions.Where(a => a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup);
+                        allActions.Where(a => a.CooldownGroup == CooldownTrigger.GCDCooldownGroup);
                     var gcdActions = gcdActionsCollection as FFXIVAction[] ?? gcdActionsCollection.ToArray();
                     foreach (var job in jobs)
                     {
                         var action = gcdActions.First(a => a.ClassJobCategory.Value.HasClass(job.RowId));
                         var lastTrigger = config.CooldownTriggers.LastOrDefault();
                         config.CooldownTriggers.Add(
-                            new VibrationCooldownTrigger(
+                            new CooldownTrigger(
                                 job.RowId,
                                 action.Name,
                                 action.RowId,
@@ -296,7 +298,7 @@ namespace GentleTouch
                 var firstAction =
                     allActions.First(a => a.ClassJobCategory.Value.HasClass(_currentJobTabId));
                 config.CooldownTriggers.Add(
-                    new VibrationCooldownTrigger(
+                    new CooldownTrigger(
                         _currentJobTabId,
                         firstAction.Name,
                         firstAction.RowId,
@@ -316,7 +318,7 @@ namespace GentleTouch
             ImGui.PopFont();
             int[] toSwap = {0, 0};
             //TODO (Chiv) This can be a single item, can't it?
-            var toRemoveTrigger = new List<VibrationCooldownTrigger>();
+            var toRemoveTrigger = new List<CooldownTrigger>();
 
             const ImGuiTabBarFlags tabBarFlags = ImGuiTabBarFlags.Reorderable
                                                  | ImGuiTabBarFlags.TabListPopupButton
@@ -356,7 +358,7 @@ namespace GentleTouch
 
         private static bool DrawJobTabItem(Configuration config, float scale, IEnumerable<FFXIVAction> allActions,
             FontAwesomeIcon dragDropMarker, ClassJob job, IList<int> toSwap,
-            ICollection<VibrationCooldownTrigger> toRemoveTrigger)
+            ICollection<CooldownTrigger> toRemoveTrigger)
         {
             if (!ImGui.BeginTabItem(job.NameEnglish)) return false;
             var changed = false;
@@ -416,7 +418,7 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawDragDropTargetSources(VibrationCooldownTrigger trigger, IList<int> toSwap)
+        private static bool DrawDragDropTargetSources(CooldownTrigger trigger, IList<int> toSwap)
         {
             const string payloadIdentifier = "PRIORITY_PAYLOAD";
             if (ImGui.BeginDragDropSource(ImGuiDragDropFlags.SourceNoHoldToOpenOthers |
@@ -465,7 +467,7 @@ namespace GentleTouch
             return true;
         }
 
-        private static bool DrawPatternCombo(IEnumerable<VibrationPattern> patterns, VibrationCooldownTrigger trigger)
+        private static bool DrawPatternCombo(IEnumerable<VibrationPattern> patterns, CooldownTrigger trigger)
         {
             if (!ImGui.BeginCombo($"##Pattern{trigger.Priority}", trigger.Pattern.Name)) return false;
             var changed = false;
@@ -486,11 +488,11 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawActionCombo(IEnumerable<FFXIVAction> actions, VibrationCooldownTrigger trigger)
+        private static bool DrawActionCombo(IEnumerable<FFXIVAction> actions, CooldownTrigger trigger)
         {
             if (!ImGui.BeginCombo($"##Action{trigger.Priority}",
 #if DEBUG
-                    trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup
+                    trigger.ActionCooldownGroup == CooldownTrigger.GCDCooldownGroup
                         ? $"{trigger.ActionName} (GCD)"
                         : trigger.ActionName
 #else
@@ -504,7 +506,7 @@ namespace GentleTouch
                 var isSelected = a.RowId == trigger.ActionId;
                 if (ImGui.Selectable(
 #if DEBUG
-                    a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? $"{a.Name} (GCD)" : a.Name,
+                    a.CooldownGroup == CooldownTrigger.GCDCooldownGroup ? $"{a.Name} (GCD)" : a.Name,
 #else
                     a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : a.Name,
 #endif

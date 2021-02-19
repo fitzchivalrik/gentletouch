@@ -9,7 +9,7 @@ using Lumina.Excel.GeneratedSheets;
  * Modifications:
  * - Changed unsafe code to Marshal calls 
 */
-namespace GentleTouch
+namespace GentleTouch.Interop
 {
     [Flags]
     public enum StatusFlags : byte

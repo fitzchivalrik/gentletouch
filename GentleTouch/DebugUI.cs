@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Game.ClientState.Actors;
+using GentleTouch.Triggers;
 using ImGuiNET;
 
 #if DEBUG
@@ -52,7 +53,7 @@ namespace GentleTouch
             ImGui.PopStyleColor();
             ImGui.PopItemWidth();
             ImGui.Separator();
-            if (_highestPriorityTrigger is VibrationCooldownTrigger ct)
+            if (_highestPriorityTrigger is CooldownTrigger ct)
             {
                 ImGui.Text("Current active Cooldown Trigger");
                 ImGui.Text(
@@ -66,7 +67,7 @@ namespace GentleTouch
             var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup - 1);
             ImGui.Text($"Cooldown Elapsed: {cooldown.CooldownElapsed}");
             ImGui.Text($"Cooldown Total: {cooldown.CooldownTotal}");
-            ImGui.Text($"IsCooldown: {cooldown.IsCooldown}");
+            ImGui.Text($"IsCooldown: {cooldown.IsActive}");
             ImGui.Text($"ActionID: {cooldown.ActionID}");
             ImGui.Separator();
             

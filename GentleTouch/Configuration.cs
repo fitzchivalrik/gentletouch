@@ -1,13 +1,15 @@
 ﻿using System.Collections.Generic;
 using Dalamud.Configuration;
+using GentleTouch.Triggers;
 
 namespace GentleTouch
 {
     public class Configuration : IPluginConfiguration
     {
-        public IList<VibrationCooldownTrigger> CooldownTriggers = new List<VibrationCooldownTrigger>();
-        public IList<VibrationPattern> Patterns = new List<VibrationPattern>();
+        public readonly IList<CooldownTrigger> CooldownTriggers = new List<CooldownTrigger>();
+        public readonly IList<VibrationPattern> Patterns = new List<VibrationPattern>();
 
+        // TODO Remove in Version 2
         public bool RisksAcknowledged;
         
         public Onboarding OnboardingStep;
@@ -24,6 +26,7 @@ namespace GentleTouch
         TellAboutRisk,
         AskAboutExamplePatterns,
         AskAboutExampleCooldownTriggers,
+        // ReSharper disable once InconsistentNaming
         AskAboutGCD,
         Done
     }

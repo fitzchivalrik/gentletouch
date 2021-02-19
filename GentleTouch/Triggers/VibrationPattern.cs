@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 
-namespace GentleTouch
+namespace GentleTouch.Triggers
 {
     public class VibrationPattern
     {

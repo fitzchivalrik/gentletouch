@@ -11,6 +11,8 @@ using Dalamud.Game.Internal;
 using Dalamud.Hooking;
 using Dalamud.Plugin;
 using GentleTouch.Collection;
+using GentleTouch.Interop;
+using GentleTouch.Triggers;
 using Lumina.Excel.GeneratedSheets;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
@@ -23,30 +25,16 @@ namespace GentleTouch
         private const string Command = "/gentle";
         public const string PluginName = "GentleTouch";
 
-        private static readonly HashSet<string> JobsWhitelist = new()
+        private static readonly HashSet<uint> JobsWhitelist = new()
         {
-            "warrior",
-            "paladin",
-            "dark knight",
-            "gunbreaker",
-            "white mage",
-            "scholar",
-            "astrologian",
-            "ninja",
-            "samurai",
-            "dragoon",
-            "monk",
-            "bard",
-            "dancer",
-            "machinist",
-            "black mage",
-            "red mage",
-            "blue mage",
-            "summoner",
-            "sage"
+            19,20,21,22,23,24,25,27,28,30,31,32,33,34,35,36,37,38
         };
 
-        //TODO Other languages
+        private static readonly HashSet<uint> JobCategoryWhitelist = new()
+        {
+            20,21,22,23,24,25,26,28,29,92,96,98,99,111,112,129,149,150
+        };
+
         private readonly HashSet<string> _aetherCurrentNameWhitelist = new()
         {
             "Aether Current",
@@ -78,16 +66,17 @@ namespace GentleTouch
         private readonly DalamudPluginInterface _pluginInterface;
         private readonly IReadOnlyCollection<ClassJob> _jobs;
         private readonly IReadOnlyCollection<FFXIVAction> _allActions;
-        private readonly PriorityQueue<VibrationCooldownTrigger, int> _queue = new();
+        private readonly PriorityQueue<CooldownTrigger, int> _queue = new();
+        private readonly Configuration _config;
+        private readonly AetherCurrentTrigger _aetherCurrentTrigger;
         private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
         private VibrationTrigger? _highestPriorityTrigger;
-        private readonly Configuration _config;
 
 #if DEBUG
         private int _rightMotorSpeed = 100;
         private int _leftMotorSpeed;
         private int _dwControllerIndex = 1;
-        private int _cooldownGroup = VibrationCooldownTrigger.GCDCooldownGroup;
+        private int _cooldownGroup = CooldownTrigger.GCDCooldownGroup;
         private readonly int[] _lastReturnedFromPoll = new int[100];
         private int _currentIndex;
 #endif
@@ -146,12 +135,12 @@ namespace GentleTouch
 
             _pluginInterface.ClientState.OnLogin += OnLogin;
             _pluginInterface.ClientState.OnLogout += OnLogout;
-#if DEBUG
+            #if DEBUG
             if (_pluginInterface.ClientState.LocalPlayer is not null)
             {
                 OnLogin(null!, null!);
             }
-#endif
+            #endif
 
             #region Hooks, Functions and Addresses
 
@@ -173,20 +162,15 @@ namespace GentleTouch
             #region Excel Data
 
             _jobs = _pluginInterface.Data.Excel.GetSheet<ClassJob>()
-                .Where(j => JobsWhitelist.Contains(j.Name))
+                .Where(j => JobsWhitelist.Contains(j.RowId))
                 .ToArray();
             var actions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
-                .Where(a => a.IsPlayerAction && a.CooldownGroup != VibrationCooldownTrigger.GCDCooldownGroup &&
+                .Where(a => a.IsPlayerAction && a.CooldownGroup != CooldownTrigger.GCDCooldownGroup &&
                             !a.IsPvP);
             var gcdActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
-                // NOTE the ClassJobCategory.Name.Length is a hack,
-                // as every Job (not class!) has up to two GCDs:
-                // One for its Class, if available (ClassJobCategory.Name.Length==6(+1, whitespace), e.g 'LNC DRG')
-                // and one for the Job itself (ClassJobCategory.Name.Length==3, e.g. 'DRG')
-                // We do not want duplicates, so we just take the GCD for the Job and discard the Class ones.
                 .Where(a =>
-                    a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup
-                    && !a.IsRoleAction && a.ClassJobCategory.Value.Name.ToString().Length == 3)
+                    a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == CooldownTrigger.GCDCooldownGroup
+                    && !a.IsRoleAction && JobCategoryWhitelist.Contains(a.ClassJobCategory.Row))
                 .GroupBy(
                     a => a.ClassJobCategory.Row,
                     (_, group) => group.First()
@@ -215,11 +199,11 @@ namespace GentleTouch
                     foreach (var job in _jobs)
                     {
                         var action = _allActions
-                            .Where(a => a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup)
+                            .Where(a => a.CooldownGroup == CooldownTrigger.GCDCooldownGroup)
                             .First(a => a.ClassJobCategory.Value.HasClass(job.RowId));
                         var lastTrigger = _config.CooldownTriggers.LastOrDefault();
                         _config.CooldownTriggers.Add(
-                            new VibrationCooldownTrigger(
+                            new CooldownTrigger(
                                 job.RowId,
                                 action.Name,
                                 action.RowId,
@@ -238,6 +222,9 @@ namespace GentleTouch
 
             #endregion
 
+            _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
+                () => _config.MaxAetherCurrentSenseDistance, () => _pluginInterface.ClientState.LocalPlayer,
+                () => _pluginInterface.ClientState.Actors);
             pi.CommandManager.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(null!, null!); })
             {
                 HelpMessage = "Open GentleTouch configuration menu.",
@@ -262,7 +249,6 @@ namespace GentleTouch
             _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
             _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
             _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
-            _currentEnumerator = GetAetherCurrentSenseEnumerator();
         }
 
         private IEnumerator<VibrationPattern.Step?> GetAetherCurrentSenseEnumerator()
@@ -319,7 +305,6 @@ namespace GentleTouch
             void InitiateOutOfCombatLoop()
             {
                 ControllerSetState(0, 0);
-                _currentEnumerator = GetAetherCurrentSenseEnumerator();
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
             }
@@ -400,7 +385,7 @@ namespace GentleTouch
                     .Where(t => t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
                     .Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
 
-            var tuples = cooldowns as (VibrationCooldownTrigger t, Cooldown c)[] ?? cooldowns.ToArray();
+            var tuples = cooldowns as (CooldownTrigger t, Cooldown c)[] ?? cooldowns.ToArray();
             // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
             // -> We want them to be triggered when leaving the cooldown state!
             foreach (var (t, _) in tuples.Where(it => it.c))
@@ -420,7 +405,7 @@ namespace GentleTouch
             // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in 
             // cooldown state prior), add them to the queue.
             var triggeredTriggers = tuples.Where(it => !it.c && it.t.ShouldBeTriggered).Select(it => it.t);
-            var triggers = triggeredTriggers as VibrationCooldownTrigger[] ?? triggeredTriggers.ToArray();
+            var triggers = triggeredTriggers as CooldownTrigger[] ?? triggeredTriggers.ToArray();
             foreach (var trigger in triggers) trigger.ShouldBeTriggered = false;
             _queue.EnqueueRange(triggers.Select(t => (t, t.Priority)));
         }
@@ -430,8 +415,17 @@ namespace GentleTouch
             var inCombat = _pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? false;
             if (!inCombat)
             {
-                if (_config.SenseAetherCurrents && _currentEnumerator is null)
-                    _currentEnumerator = GetAetherCurrentSenseEnumerator();
+                switch (_config.SenseAetherCurrents)
+                {
+                    case true when _currentEnumerator is null:
+                        _currentEnumerator = _aetherCurrentTrigger.GetEnumerator();
+                        break;
+                    case false when _currentEnumerator is not null && _currentEnumerator == _aetherCurrentTrigger.GetEnumerator():
+                        _currentEnumerator = null;
+                        ControllerSetState(0,0);
+                        break;
+                }
+
                 CheckAndVibrate();
                 return;
             }
