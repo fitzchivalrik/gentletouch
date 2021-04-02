@@ -127,12 +127,6 @@ namespace GentleTouch
 
             _pluginInterface.ClientState.OnLogin += OnLogin;
             _pluginInterface.ClientState.OnLogout += OnLogout;
-            #if DEBUG
-            if (_pluginInterface.ClientState.LocalPlayer is not null)
-            {
-                OnLogin(null!, null!);
-            }
-            #endif
 
             #region Hooks, Functions and Addresses
 
@@ -222,6 +216,22 @@ namespace GentleTouch
                 HelpMessage = "Open GentleTouch configuration menu.",
                 ShowInHelp = true
             });
+            
+#if DEBUG
+            if (_pluginInterface.ClientState.LocalPlayer is not null)
+            {
+                OnLogin(null!, null!);
+            }
+#else
+            //TODO REMOVE FOR RELEASE
+            if(_pluginInterface.Reason == PluginLoadReason.Installer 
+               || _pluginInterface.ClientState.LocalPlayer is not null
+               )
+            {
+                OnLogin(null!, null!);
+            }
+#endif
+            
         }
 
         private void OnLogout(object sender, EventArgs e)
@@ -246,26 +256,14 @@ namespace GentleTouch
         
         private void FrameworkInCombatUpdate(Framework framework)
         {
-            void InitiateOutOfCombatLoop()
+            
+            if (!_pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat)
+                || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene])
             {
-                ControllerSetState(0, 0);
+                ResetQueueAndTriggers();
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
                 _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
-            }
-
-            if ((!_pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? true)
-                || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious])
-            {
-                _queue.Clear();
-                _highestPriorityTrigger = null;
-                _currentEnumerator?.Dispose();
-                _currentEnumerator = null;
-                foreach (var ct in _config.CooldownTriggers)
-                {
-                    ct.ShouldBeTriggered = false;
-                }
-
-                InitiateOutOfCombatLoop();
                 return;
             }
 
@@ -273,7 +271,9 @@ namespace GentleTouch
                                  !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
             if (weaponSheathed)
             {
-                InitiateOutOfCombatLoop();
+                ControllerSetState(0, 0);
+                _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatPauseUpdate;
+                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
                 return;
             }
 
@@ -281,13 +281,57 @@ namespace GentleTouch
                           _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
             if (casting)
             {
-                InitiateOutOfCombatLoop();
+                ControllerSetState(0, 0);
+                _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatPauseUpdate;
+                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
                 return;
             }
 
             EnqueueCooldownTriggers();
             UpdateHighestPriorityTrigger();
             CheckAndVibrate();
+        }
+
+        private void FrameworkInCombatPauseUpdate(Framework framework)
+        {
+            if (!_pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat)
+                || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene])
+            {
+                ResetQueueAndTriggers();
+                _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
+                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatPauseUpdate;
+            }
+
+            var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
+                                 !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+            if (weaponSheathed)
+            {
+                return;
+            }
+
+            var casting = _config.NoVibrationDuringCasting &&
+                          _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
+            if (casting)
+            {
+                return;
+            }
+            _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
+            _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatPauseUpdate;
+        }
+
+        private void ResetQueueAndTriggers()
+        {
+            _queue.Clear();
+            _highestPriorityTrigger = null;
+            _currentEnumerator?.Dispose();
+            _currentEnumerator = null;
+            foreach (var ct in _config.CooldownTriggers)
+            {
+                ct.ShouldBeTriggered = false;
+            }
+
+            ControllerSetState(0, 0);
         }
 
         private void CheckAndVibrate()
@@ -369,7 +413,7 @@ namespace GentleTouch
                         ControllerSetState(0,0);
                         break;
                 }
-
+                // NOTE (Chiv) Invariant: Combat triggers are cleared
                 CheckAndVibrate();
                 return;
             }

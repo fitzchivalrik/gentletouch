@@ -13,7 +13,7 @@ namespace GentleTouch
             var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
             _plugin = new GentleTouch(pi, config);
         }
-
+        
         public void Dispose()
         {
             _plugin.Dispose();

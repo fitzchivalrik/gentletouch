@@ -291,7 +291,7 @@ namespace GentleTouch
         {
             var changed = false;
             const FontAwesomeIcon dragDropMarker = FontAwesomeIcon.Sort;
-            if (!ImGui.CollapsingHeader("Cooldown Triggers (work only in combat)")) return changed;
+            if (!ImGui.CollapsingHeader("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.DefaultOpen)) return changed;
             if (ImGui.Button("Add new Cooldown Trigger"))
             {
                 var lastTrigger = config.CooldownTriggers.LastOrDefault();
@@ -754,7 +754,7 @@ namespace GentleTouch
                 ImGui.Indent();
                 ImGui.SetNextItemWidth(250 * scale);
                 changed |= ImGui.SliderInt("##AetherSenseDistance", ref config.MaxAetherCurrentSenseDistance, 5, 115,
-                    "%d Max Sense Distance");
+                    "Max Sense Distance %d");
                 ImGui.Unindent();
             }
 
