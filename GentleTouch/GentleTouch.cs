@@ -35,14 +35,6 @@ namespace GentleTouch
             20,21,22,23,24,25,26,28,29,92,96,98,99,111,112,129,149,150
         };
 
-        private readonly HashSet<string> _aetherCurrentNameWhitelist = new()
-        {
-            "Aether Current",
-            "Windätherquelle",
-            "Vent éthéré",
-            "風脈の泉"
-        };
-
         // TODO (Chiv): Check Right and Left Motor for x360/XOne Gamepad
         [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
         private delegate void FFXIVSetState(nint maybeControllerStruct, int rightMotorSpeedPercent,
@@ -238,6 +230,7 @@ namespace GentleTouch
             _pluginInterface.UiBuilder.OnBuildUi -= BuildUi;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
             _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+            ControllerSetState(0,0);
             _currentEnumerator?.Dispose();
             _currentEnumerator = null;
             _highestPriorityTrigger = null;
@@ -250,56 +243,7 @@ namespace GentleTouch
             _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
             _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
         }
-
-        private IEnumerator<VibrationPattern.Step?> GetAetherCurrentSenseEnumerator()
-        {
-            var step = new VibrationPattern.Step(15, 15);
-            var zeroStep = new VibrationPattern.Step(0, 0);
-            while (true)
-            {
-                if (!_config.SenseAetherCurrents)
-                {
-                    yield return null;
-                    continue;
-                }
-
-                var localPlayer = _pluginInterface.ClientState.LocalPlayer;
-                if (localPlayer is null)
-                {
-                    yield return null;
-                    continue;
-                }
-                
-                var distance = (
-                    from Actor a in _pluginInterface.ClientState.Actors
-                    where a is not null
-                        && a.ObjectKind == ObjectKind.EventObj
-                        && _aetherCurrentNameWhitelist.Contains(Encoding.UTF8.GetString(Encoding.Default.GetBytes(a.Name)))
-                        // NOTE: This byte is SET(!=0) if _invisible_ i.e. if the player already collected
-                        && Marshal.ReadByte(a.Address, 0x105) == 0
-                    select (float?) Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
-                                              + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)
-                                              + Math.Pow(localPlayer.Position.Z - a.Position.Z, 2))
-                ).Min() ?? float.MaxValue;
-                if (distance > _config.MaxAetherCurrentSenseDistance)
-                {
-                    yield return null;
-                    continue;
-                }
-                var nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 200;
-                yield return step;
-                while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
-                    yield return null;
-                // Silence after the vibration depends on distance to Aether Current
-                var msTillNextStep = Math.Max((long) (800L * (distance / _config.MaxAetherCurrentSenseDistance)),
-                    10L);
-                nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + msTillNextStep;
-                yield return zeroStep;
-                while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
-                    yield return null;
-            }
-        }
-
+        
         private void FrameworkInCombatUpdate(Framework framework)
         {
             void InitiateOutOfCombatLoop()
@@ -379,7 +323,7 @@ namespace GentleTouch
 
         private void EnqueueCooldownTriggers()
         {
-            //TODO (Chiv) Proper Switch for trigger types
+            //TODO (Chiv) Proper Switch for trigger types when there will be more types
             var cooldowns =
                 _config.CooldownTriggers
                     .Where(t => t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
@@ -429,8 +373,7 @@ namespace GentleTouch
                 CheckAndVibrate();
                 return;
             }
-
-            ;
+            
             var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
                                  !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
             if (weaponSheathed) return;
@@ -483,6 +426,7 @@ namespace GentleTouch
 
         private void BuildUi()
         {
+            // TODO (Chiv) Refactor to add/remove UI Event instead of boolean
             _shouldDrawConfigUi = _shouldDrawConfigUi &&
                                   ConfigurationUi.DrawConfigUi(_config, _pluginInterface,
                                       _pluginInterface.SavePluginConfig, _jobs, _allActions, ref _currentEnumerator);

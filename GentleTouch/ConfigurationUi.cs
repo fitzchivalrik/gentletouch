@@ -277,7 +277,7 @@ namespace GentleTouch
         }
 
         private static bool DrawTriggerTab(Configuration config, DalamudPluginInterface pi, float scale,
-            IReadOnlyCollection<ClassJob> jobs, IReadOnlyCollection<FFXIVAction> allActions)
+            IEnumerable<ClassJob> jobs, IReadOnlyCollection<FFXIVAction> allActions)
         {
             if (!ImGui.BeginTabItem("Triggers")) return false;
             var changed = false;
@@ -493,7 +493,7 @@ namespace GentleTouch
                         ? $"{trigger.ActionName} (GCD)"
                         : trigger.ActionName
 #else
-                trigger.ActionCooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : trigger.ActionName
+                trigger.ActionCooldownGroup == CooldownTrigger.GCDCooldownGroup ? "GCD" : trigger.ActionName
 #endif
                 )
             ) return false;
@@ -505,7 +505,7 @@ namespace GentleTouch
 #if DEBUG
                     a.CooldownGroup == CooldownTrigger.GCDCooldownGroup ? $"{a.Name} (GCD)" : a.Name,
 #else
-                    a.CooldownGroup == VibrationCooldownTrigger.GCDCooldownGroup ? "GCD" : a.Name,
+                    a.CooldownGroup == CooldownTrigger.GCDCooldownGroup ? "GCD" : a.Name,
 #endif
                     isSelected))
                 {
@@ -615,7 +615,7 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawPatternSteps(float scale, VibrationPattern pattern)
+        private static bool DrawPatternSteps(VibrationPattern pattern, float scale)
         {
             var changed = false;
             ImGui.PushFont(UiBuilder.IconFont);

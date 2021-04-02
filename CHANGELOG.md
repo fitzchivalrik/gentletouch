@@ -6,7 +6,7 @@
 - fix: Cooldown triggers are now properly reset when leaving combat
 - feature(UI): Add padding for nice alignment
 - feature(UI): Cooldown triggers are now separated into jobs, no more single list for all.
-Tab bars are reorderable.
+- feature(AetherCurrent): Aether currents can now be sensed via vibration when out-of-combat. Toggleable.
   
 **BREAKING**:
 
