@@ -71,7 +71,7 @@ namespace GentleTouch.Triggers
                 }
 
                 
-                // NOTE (Chiv) This is after then using LINQ (~0.0060ms)
+                // NOTE (Chiv) This is faster then using LINQ (~0.0060ms)
                 var distance = float.MaxValue;
                 foreach (var a in _getActors())
                 {
@@ -79,9 +79,8 @@ namespace GentleTouch.Triggers
                     // NOTE (Chiv) ActorTable.GetEnumerator() checks for null
                     if (a.ObjectKind == ObjectKind.EventObj 
                         && _aetherCurrentNameWhitelist.Contains(Encoding.UTF8.GetString(Encoding.Default.GetBytes(a.Name)))
-                        // TODO Change back to ==0 after testing before release
                         // NOTE: This byte is SET(!=0) if _invisible_ i.e. if the player already collected
-                        &&  ReadByte(a.Address, 0x105)  != 0)
+                        &&  ReadByte(a.Address, 0x105)  == 0)
                     {
                         var d = (float)Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
                                            + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)

@@ -17,7 +17,6 @@ using Lumina.Excel.GeneratedSheets;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 // TODO 5 Refactor DrawCombo to generic
-// TODO 6 All SetItemWidths etc. times scale (Imgui.GetIO.FontGlobalScale)
 namespace GentleTouch
 {
     public partial class GentleTouch : IDisposable
@@ -223,9 +222,9 @@ namespace GentleTouch
                 OnLogin(null!, null!);
             }
 #else
-            //TODO REMOVE FOR RELEASE
+            
             if(_pluginInterface.Reason == PluginLoadReason.Installer 
-               || _pluginInterface.ClientState.LocalPlayer is not null
+            //   || _pluginInterface.ClientState.LocalPlayer is not null
                )
             {
                 OnLogin(null!, null!);
