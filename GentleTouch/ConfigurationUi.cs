@@ -33,12 +33,12 @@ namespace GentleTouch
 
             if (config.OnboardingStep != Onboarding.Done)
             {
-                changed |= DrawRisksWarning(config, ref shouldDrawConfigUi);
-                changed |= DrawOnboarding(config, jobs, allActions);
+                changed |= DrawRisksWarning(config, ref shouldDrawConfigUi, scale);
+                changed |= DrawOnboarding(config, jobs, allActions, scale);
             }
 
             ImGui.BeginTabBar("ConfigurationTabs", ImGuiTabBarFlags.NoTooltip);
-            changed |= DrawGeneralTab(config);
+            changed |= DrawGeneralTab(config, scale);
             changed |= DrawPatternTab(config, scale, ref patternEnumerator);
             changed |= DrawTriggerTab(config, pi, scale, jobs, allActions);
             ImGui.EndTabBar();
@@ -52,10 +52,10 @@ namespace GentleTouch
         }
 
         private static bool DrawOnboarding(Configuration config, IEnumerable<ClassJob> jobs,
-            IEnumerable<FFXIVAction> allActions)
+            IEnumerable<FFXIVAction> allActions, float scale)
         {
             var contentSize = ImGui.GetIO().DisplaySize;
-            var modalSize = new Vector2(300, 100);
+            var modalSize = new Vector2(300 * scale, 100 * scale);
             var modalPosition = new Vector2(contentSize.X / 2 - modalSize.X / 2, contentSize.Y / 2 - modalSize.Y / 2);
 
             if (config.OnboardingStep == Onboarding.AskAboutExamplePatterns)
@@ -239,11 +239,11 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawRisksWarning(Configuration config, ref bool shouldDrawConfigUi)
+        private static bool DrawRisksWarning(Configuration config, ref bool shouldDrawConfigUi, float scale)
         {
             if (config.OnboardingStep == Onboarding.TellAboutRisk) ImGui.OpenPopup("Warning");
             var contentSize = ImGui.GetIO().DisplaySize;
-            var modalSize = new Vector2(500, 215);
+            var modalSize = new Vector2(500 * scale, 215 * scale);
             var modalPosition = new Vector2(contentSize.X / 2 - modalSize.X / 2, contentSize.Y / 2 - modalSize.Y / 2);
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
             ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
@@ -363,11 +363,11 @@ namespace GentleTouch
             if (!ImGui.BeginTabItem(job.NameEnglish)) return false;
             var changed = false;
             ImGui.Indent();
-            ImGui.Indent(25);
-            ImGui.Text("Action Name");
-            ImGui.SameLine(195);
-            ImGui.Text("Pattern Name");
-            ImGui.Unindent(25);
+            ImGui.Indent(27 * scale);
+            ImGui.Text("Action");
+            ImGui.SameLine(197 * scale);
+            ImGui.Text("Pattern");
+            ImGui.Unindent(27 * scale);
             _currentJobTabId = job.RowId;
             var triggerForJob =
                 config.CooldownTriggers.Where(t => t.JobId == _currentJobTabId);
@@ -377,15 +377,12 @@ namespace GentleTouch
             foreach (var trigger in triggerForJob)
             {
                 ImGui.PushID(trigger.Priority);
-
-                //TODO (Chiv): Button style
-                //ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+                
                 ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
                 ImGui.PushFont(UiBuilder.IconFont);
                 ImGui.Button(dragDropMarker.ToIconString());
                 ImGui.PopFont();
                 ImGui.PopStyleColor();
-                //ImGui.PopStyleColor();
                 if (!DrawDragDropTargetSources(trigger, toSwap))
                 {
                     ImGui.SameLine();
@@ -590,9 +587,8 @@ namespace GentleTouch
                 ImGui.PopStyleColor();
                 ImGui.SameLine();
                 var open = ImGui.TreeNodeEx($"{pattern.Name}###{pattern.Guid}", ImGuiTreeNodeFlags.AllowItemOverlap | ImGuiTreeNodeFlags.Bullet);
-              //  ImGui.SameLine(225);
               
-                ImGui.SameLine(300);
+                ImGui.SameLine(300 * scale);
                 
                 if (ImGui.Button("Export to clipboard"))
                 {
@@ -606,8 +602,8 @@ namespace GentleTouch
                 }
                 if (open)
                 {
-                    changed |= DrawPatternGenerals(pattern);
-                    changed |= DrawPatternSteps(scale, pattern);
+                    changed |= DrawPatternGenerals(pattern, scale);
+                    changed |= DrawPatternSteps(pattern, scale);
                 }
 
                 ImGui.Separator();
@@ -667,14 +663,14 @@ namespace GentleTouch
             return changed;
         }
 
-        private static bool DrawPatternGenerals(VibrationPattern pattern)
+        private static bool DrawPatternGenerals(VibrationPattern pattern, float scale)
         {
 #if DEBUG
             ImGui.Text($"UUID: {pattern.Guid}");
             if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) ImGui.SetClipboardText(pattern.Guid.ToString());
 #endif
             var changed = false;
-            ImGui.SetNextItemWidth(175);
+            ImGui.SetNextItemWidth(175 * scale);
             var n = pattern.Name == "Nameless" ? "" : pattern.Name;
             if (ImGui.InputTextWithHint("##Pattern Name", "Name of Pattern", ref n, 20) && n.Trim() != "")
             {
@@ -686,7 +682,7 @@ namespace GentleTouch
             if (ImGui.Checkbox("Infinite", ref pattern.Infinite)) changed = true;
             if (pattern.Infinite) return changed;
             ImGui.SameLine();
-            ImGui.SetNextItemWidth(75);
+            ImGui.SetNextItemWidth(75 * scale);
             if (ImGui.InputInt("Cycles", ref pattern.Cycles, 1)) changed = true;
             return changed;
         }
@@ -701,7 +697,6 @@ namespace GentleTouch
             if (ImGui.SliderInt("##Right Slider", ref s.RightMotorPercentage, 0, 100, "Right Motor %d %%"))
                 changed = true;
             ImGui.SameLine();
-            //ImGui.SetNextItemWidth(100 * scale);
             if (ImGui.DragInt("##MS Drag", ref s.MillisecondsTillNextStep, 10, 0, 2000, "%d ms till next"))
                 changed = true;
             ImGui.PopItemWidth();
@@ -739,7 +734,7 @@ namespace GentleTouch
             return consent;
         }
 
-        private static bool DrawGeneralTab(Configuration config)
+        private static bool DrawGeneralTab(Configuration config, float scale)
         {
             if (!ImGui.BeginTabItem("General")) return false;
             var changed = ImGui.Checkbox("Disable cooldown trigger while casting.",
@@ -757,7 +752,7 @@ namespace GentleTouch
             if (config.SenseAetherCurrents)
             {
                 ImGui.Indent();
-                ImGui.SetNextItemWidth(250);
+                ImGui.SetNextItemWidth(250 * scale);
                 changed |= ImGui.SliderInt("##AetherSenseDistance", ref config.MaxAetherCurrentSenseDistance, 5, 115,
                     "%d Max Sense Distance");
                 ImGui.Unindent();
