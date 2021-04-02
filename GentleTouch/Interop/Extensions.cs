@@ -5,9 +5,7 @@ using Lumina.Excel.GeneratedSheets;
 
 /* NOTE (Chiv) From
  * https://github.com/Caraxi/RemindMe/blob/8f8a353f4696d4b64e218964a3ad47841a24a706/Extensions.cs
- * under AGLPv3 license
- * Modifications:
- * - Changed unsafe code to Marshal calls 
+ * under AGLPv3 license 
 */
 namespace GentleTouch.Interop
 {
@@ -26,9 +24,9 @@ namespace GentleTouch.Interop
 
     public static class Extensions
     {
-        public static bool IsStatus(this Actor actor, StatusFlags flags)
+        public static unsafe bool IsStatus(this Actor actor, StatusFlags flags)
         {
-            var f = Marshal.ReadByte(actor.Address, 0x1980);
+            var f = *(byte*) (actor.Address + 0x1980);
             return (f & (byte) flags) > 0;
         }
 

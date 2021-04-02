@@ -367,35 +367,35 @@ namespace GentleTouch
 
         private void EnqueueCooldownTriggers()
         {
-            //TODO (Chiv) Proper Switch for trigger types when there will be more types
-            var cooldowns =
-                _config.CooldownTriggers
-                    .Where(t => t.JobId == _pluginInterface.ClientState.LocalPlayer.ClassJob.Id)
-                    .Select(t => (t, _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1)));
+            var currentJobId = _pluginInterface.ClientState.LocalPlayer.ClassJob.Id;
 
-            var tuples = cooldowns as (CooldownTrigger t, Cooldown c)[] ?? cooldowns.ToArray();
-            // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
-            // -> We want them to be triggered when leaving the cooldown state!
-            foreach (var (t, _) in tuples.Where(it => it.c))
+            foreach (var t in _config.CooldownTriggers)
             {
-                if (_highestPriorityTrigger == t)
+                if (t.JobId != currentJobId) continue;
+                var c = _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1);
+                // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
+                // -> We want them to be triggered when leaving the cooldown state!
+                if (c)
                 {
-                    // NOTE: Memory leak if not disposed, should exist if _highestPriorityTrigger is set
-                    _currentEnumerator!.Dispose();
-                    _currentEnumerator = null;
-                    _highestPriorityTrigger = null;
-                    ControllerSetState(0, 0);
+                    if (_highestPriorityTrigger == t)
+                    {
+                        // NOTE: Memory leak if not disposed, should exist if _highestPriorityTrigger is set
+                        _currentEnumerator!.Dispose();
+                        _currentEnumerator = null;
+                        _highestPriorityTrigger = null;
+                        ControllerSetState(0, 0);
+                    }
+
+                    t.ShouldBeTriggered = true;
                 }
-
-                t.ShouldBeTriggered = true;
+                // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in 
+                // cooldown state prior), add them to the queue.
+                else if (t.ShouldBeTriggered)
+                {
+                    t.ShouldBeTriggered = false;
+                    _queue.Enqueue(t, t.Priority);
+                }
             }
-
-            // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in 
-            // cooldown state prior), add them to the queue.
-            var triggeredTriggers = tuples.Where(it => !it.c && it.t.ShouldBeTriggered).Select(it => it.t);
-            var triggers = triggeredTriggers as CooldownTrigger[] ?? triggeredTriggers.ToArray();
-            foreach (var trigger in triggers) trigger.ShouldBeTriggered = false;
-            _queue.EnqueueRange(triggers.Select(t => (t, t.Priority)));
         }
 
         private void FrameworkOutOfCombatUpdate(Framework framework)

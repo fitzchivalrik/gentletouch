@@ -52,7 +52,13 @@ namespace GentleTouch.Triggers
             _enumerator = CreateEnumerator();
             return _enumerator;
         }
+        
+        private static unsafe byte ReadByte(IntPtr ptr, int ofs)
+        {
 
+            return *(byte*) (ptr + ofs);
+
+        }
         private IEnumerator<VibrationPattern.Step?> CreateEnumerator()
         {
             while (true)
@@ -63,19 +69,28 @@ namespace GentleTouch.Triggers
                     yield return null;
                     continue;
                 }
+
                 
-                var distance = (
-                    from Actor a in _getActors()
-                    where a is not null
-                        && a.ObjectKind == ObjectKind.EventObj
+                // NOTE (Chiv) This is after then using LINQ (~0.0060ms)
+                var distance = float.MaxValue;
+                foreach (var a in _getActors())
+                {
+                    
+                    // NOTE (Chiv) ActorTable.GetEnumerator() checks for null
+                    if (a.ObjectKind == ObjectKind.EventObj 
                         && _aetherCurrentNameWhitelist.Contains(Encoding.UTF8.GetString(Encoding.Default.GetBytes(a.Name)))
                         // TODO Change back to ==0 after testing before release
                         // NOTE: This byte is SET(!=0) if _invisible_ i.e. if the player already collected
-                        && Marshal.ReadByte(a.Address, 0x105) != 0
-                    select (float?) Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
-                                              + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)
-                                              + Math.Pow(localPlayer.Position.Z - a.Position.Z, 2))
-                ).Min() ?? float.MaxValue;
+                        &&  ReadByte(a.Address, 0x105)  != 0)
+                    {
+                        var d = (float)Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
+                                           + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)
+                                           + Math.Pow(localPlayer.Position.Z - a.Position.Z, 2));
+                        if (d < distance)
+                            distance = d;
+                    }
+                }
+
                 if (distance > _getMaxAetherCurrentSenseDistance())
                 {
                     yield return null;
