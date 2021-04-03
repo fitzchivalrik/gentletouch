@@ -259,10 +259,7 @@ namespace GentleTouch
                 || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
                 || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
                 || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty56]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty95])
+                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent])
             {
                 ResetQueueAndTriggers();
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
@@ -301,10 +298,7 @@ namespace GentleTouch
                 || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
                 || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
                 || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty56]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty95])
+                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent])
             {
                 ResetQueueAndTriggers();
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
@@ -411,10 +405,7 @@ namespace GentleTouch
             if (_pluginInterface.ClientState.Condition[ConditionFlag.Unconscious]
                 || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
                 || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty56]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty95])
+                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent])
             {
                 return;
             }

@@ -1,5 +1,9 @@
 ﻿# CHANGELOG
 
+## 0.7.2 (testing)
+
+- fix: Removed conditions which are always active in duty.
+
 ## 0.7.1 (testing)
 
 - fix: Some more conditions to stop vibrating on duty/cutscene events right after battle

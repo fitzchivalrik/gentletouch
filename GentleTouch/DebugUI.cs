@@ -2,6 +2,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Actors;
 using GentleTouch.Triggers;
 using ImGuiNET;
@@ -53,6 +54,29 @@ namespace GentleTouch
             ImGui.PopStyleColor();
             ImGui.PopItemWidth();
             ImGui.Separator();
+            
+            ImGui.Text("Current Conditions:");
+            //ImGui.Separator();
+            var didAny = false;
+
+            for (var i = 0; i < Condition.MaxConditionEntries; i++) {
+                var typedCondition = (ConditionFlag) i;
+                var cond = _pluginInterface.ClientState.Condition[typedCondition];
+
+                if (!cond) {
+                    continue;
+                }
+
+                didAny = true;
+
+                ImGui.Text($"ID: {i} Enum: {typedCondition}");
+            }
+
+            if (!didAny) {
+                ImGui.Text("None. Talk to a shop NPC or visit a market board to find out more!!!!!!!");
+            }
+            
+            ImGui.Separator();            
             if (_highestPriorityTrigger is CooldownTrigger ct)
             {
                 ImGui.Text("Current active Cooldown Trigger");
