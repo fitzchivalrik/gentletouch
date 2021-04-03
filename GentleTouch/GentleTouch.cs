@@ -255,10 +255,14 @@ namespace GentleTouch
         
         private void FrameworkInCombatUpdate(Framework framework)
         {
-            
-            if (!_pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat)
+            if (!_pluginInterface.ClientState.Condition[ConditionFlag.InCombat]
                 || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene])
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty56]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty95])
             {
                 ResetQueueAndTriggers();
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
@@ -293,9 +297,14 @@ namespace GentleTouch
 
         private void FrameworkInCombatPauseUpdate(Framework framework)
         {
-            if (!_pluginInterface.ClientState.LocalPlayer.IsStatus(StatusFlags.InCombat)
+            if (!_pluginInterface.ClientState.Condition[ConditionFlag.InCombat]
                 || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene])
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty56]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty95])
             {
                 ResetQueueAndTriggers();
                 _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
@@ -399,7 +408,18 @@ namespace GentleTouch
 
         private void FrameworkOutOfCombatUpdate(Framework framework)
         {
-            var inCombat = _pluginInterface.ClientState.LocalPlayer?.IsStatus(StatusFlags.InCombat) ?? false;
+            if (_pluginInterface.ClientState.Condition[ConditionFlag.Unconscious]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty56]
+                || _pluginInterface.ClientState.Condition[ConditionFlag.BoundByDuty95])
+            {
+                return;
+            }
+            
+            var inCombat = _pluginInterface.ClientState.Condition[ConditionFlag.InCombat];
             if (!inCombat)
             {
                 switch (_config.SenseAetherCurrents)

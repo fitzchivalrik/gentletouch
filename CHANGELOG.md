@@ -1,5 +1,9 @@
 ﻿# CHANGELOG
 
+## 0.7.1 (testing)
+
+- fix: Some more conditions to stop vibrating on duty/cutscene events right after battle
+
 ## 0.7.0 (testing)
 
 - feature(UI): Add padding for nice alignment
