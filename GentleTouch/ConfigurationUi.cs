@@ -29,7 +29,10 @@ namespace GentleTouch
                 new Vector2(float.MaxValue, float.MaxValue));
             if (!ImGui.Begin($"{GentleTouch.PluginName} Configuration", ref shouldDrawConfigUi,
                 ImGuiWindowFlags.NoCollapse))
+            {
+                ImGui.End();
                 return shouldDrawConfigUi;
+            }
 
             if (config.OnboardingStep != Onboarding.Done)
             {

@@ -10,11 +10,7 @@ Licensed under AGPLv3 or later.
 
 - Create different vibration patterns
 - Add cooldown triggers to perform patterns when its safe to activate the cooldown again
-
-## Planned
-
-- Execute pattern when aether current is nearby
-- Map custom actions to controller button presses
+- Aether currents can be sensed via vibration when out-of-combat.
 
 ![Pattern Window](docs/patternWindow.jpg)
 ![Trigger Window](docs/triggerWindow.jpg)

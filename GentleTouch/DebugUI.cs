@@ -16,7 +16,7 @@ namespace GentleTouch
         {
             //ImGui.PushStyleColor(ImGuiCol.WindowBg, 0xFF000000);
             ImGui.SetNextWindowBgAlpha(1);
-            if(!ImGui.Begin($"{PluginName} Debug")) return;
+            if(!ImGui.Begin($"{PluginName} Debug")) { ImGui.End(); return;}
             
             
             ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
