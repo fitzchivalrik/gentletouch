@@ -96,13 +96,13 @@ namespace GentleTouch
             //const string maybeControllerPollSignatureAlternative =
             //    "40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??";
             const string xInputWrapperSetStateSignature =
-                "48 ff 25 69 28 ce 01 cc cc cc cc cc cc cc cc cc 48 89 5c 24";
+                "E8 ?? ?? ?? ?? 48 81 C4 ?? ?? ?? ?? 5E 5B 5D C3 49 8B 9A ?? ?? ?? ??";
             //const string xInputWrapperSetStateSignatureAlternative =
             //    "48 FF ?? ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89";
             const string ffxivSetStateSignature =
                 "40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9";
             //const string ffxivSetStateSignatureAlternative =
-            //    "40 ?? 53 56 48 8B ?? 48 81 EC";
+            //    "40 ?? 53 56 48 8B ?? 48 81 EC"; //40 56 57 41 56 48 81 EC ? ? ? ? 44 0F 29 84 24 ? ? ? ?  
             //NOTE (Chiv): Signature from :
             // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/Helper/Common.cs
             const string actionManagerSignature = "E8 ?? ?? ?? ?? 33 C0 E9 ?? ?? ?? ?? 8B 7D 0C";
@@ -224,7 +224,7 @@ namespace GentleTouch
 #else
             
             if(_pluginInterface.Reason == PluginLoadReason.Installer 
-            //   || _pluginInterface.ClientState.LocalPlayer is not null
+               //|| _pluginInterface.ClientState.LocalPlayer is not null
                )
             {
                 OnLogin(null!, null!);

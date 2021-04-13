@@ -3,9 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <LangVersion>9</LangVersion>
-    <AssemblyVersion>0.7.2.0</AssemblyVersion>
-    <FileVersion>0.7.2.0</FileVersion>
-    <PackageVersion>0.7.2</PackageVersion>
+    <AssemblyVersion>0.8.0.0</AssemblyVersion>
+    <FileVersion>0.8.0.0</FileVersion>
+    <PackageVersion>0.8.0</PackageVersion>
     <Authors>Chivalrik</Authors>
     <Company>Chivalrik</Company>
     <Nullable>enable</Nullable>
@@ -20,7 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DalamudPackager" Version="1.2.0" />
+    <PackageReference Include="DalamudPackager" Version="1.2.1" />
   </ItemGroup>
 
   <ItemGroup>

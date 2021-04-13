@@ -24,6 +24,7 @@ namespace GentleTouch
             var shouldDrawConfigUi = true;
             var changed = false;
             var scale = ImGui.GetIO().FontGlobalScale;
+            ImGuiHelpers.ForceNextWindowMainViewport();
             ImGui.SetNextWindowSize(new Vector2(575 * scale, 400 * scale), ImGuiCond.FirstUseEver);
             ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
                 new Vector2(float.MaxValue, float.MaxValue));
@@ -57,7 +58,7 @@ namespace GentleTouch
         private static bool DrawOnboarding(Configuration config, IEnumerable<ClassJob> jobs,
             IEnumerable<FFXIVAction> allActions, float scale)
         {
-            var contentSize = ImGui.GetIO().DisplaySize;
+            var contentSize = ImGuiHelpers.MainViewport.Size;
             var modalSize = new Vector2(300 * scale, 100 * scale);
             var modalPosition = new Vector2(contentSize.X / 2 - modalSize.X / 2, contentSize.Y / 2 - modalSize.Y / 2);
 
@@ -65,7 +66,7 @@ namespace GentleTouch
                 ImGui.OpenPopup("Create Example Patterns");
             var changed = false;
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
-            ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
+            ImGuiHelpers.SetNextWindowPosRelativeMainViewport(modalPosition, ImGuiCond.Always);
             if (ImGui.BeginPopupModal("Create Example Patterns"))
             {
                 ImGui.Text($"No vibration patterns found." +
@@ -154,7 +155,7 @@ namespace GentleTouch
             if (config.OnboardingStep == Onboarding.AskAboutExampleCooldownTriggers)
                 ImGui.OpenPopup("Create Example Cooldown Triggers");
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
-            ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
+            ImGuiHelpers.SetNextWindowPosRelativeMainViewport(modalPosition, ImGuiCond.Always);
             if (ImGui.BeginPopupModal("Create Example Cooldown Triggers"))
             {
                 ImGui.Text($"No cooldown triggers found." +
@@ -196,7 +197,7 @@ namespace GentleTouch
             if (config.OnboardingStep == Onboarding.AskAboutGCD)
                 ImGui.OpenPopup("Create GCD Cooldown Triggers");
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
-            ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
+            ImGuiHelpers.SetNextWindowPosRelativeMainViewport(modalPosition, ImGuiCond.Always);
             if (ImGui.BeginPopupModal("Create GCD Cooldown Triggers"))
             {
                 ImGui.Text($"No GCD cooldown trigger found." +
@@ -245,11 +246,11 @@ namespace GentleTouch
         private static bool DrawRisksWarning(Configuration config, ref bool shouldDrawConfigUi, float scale)
         {
             if (config.OnboardingStep == Onboarding.TellAboutRisk) ImGui.OpenPopup("Warning");
-            var contentSize = ImGui.GetIO().DisplaySize;
+            var contentSize = ImGuiHelpers.MainViewport.Size;
             var modalSize = new Vector2(500 * scale, 215 * scale);
             var modalPosition = new Vector2(contentSize.X / 2 - modalSize.X / 2, contentSize.Y / 2 - modalSize.Y / 2);
             ImGui.SetNextWindowSize(modalSize, ImGuiCond.Always);
-            ImGui.SetNextWindowPos(modalPosition, ImGuiCond.Always);
+            ImGuiHelpers.SetNextWindowPosRelativeMainViewport(modalPosition, ImGuiCond.Always);
             if (!ImGui.BeginPopupModal("Warning")) return false;
             ImGui.Text("This plugin allows you to directly use the motors of your controller.");
             ImGui.Text("Irresponsible usage has a probability of permanent hardware damage.");
@@ -579,7 +580,7 @@ namespace GentleTouch
                 {
                     var p = new VibrationPattern()
                     {
-                        Cycles = pattern.Infinite ? 10 : pattern.Cycles,
+                        Cycles = pattern.Infinite ? 4 : pattern.Cycles,
                         Infinite = false,
                         Steps = pattern.Steps,
                         Name = pattern.Name
@@ -588,6 +589,12 @@ namespace GentleTouch
                 }
                 ImGui.PopFont();
                 ImGui.PopStyleColor();
+                if (pattern.Infinite && ImGui.IsItemHovered())
+                {
+                    ImGui.BeginTooltip();
+                    ImGui.Text("Infinite pattern will be repeated 4 times.");
+                    ImGui.EndTooltip();
+                }
                 ImGui.SameLine();
                 var open = ImGui.TreeNodeEx($"{pattern.Name}###{pattern.Guid}", ImGuiTreeNodeFlags.AllowItemOverlap | ImGuiTreeNodeFlags.Bullet);
               
