@@ -208,7 +208,7 @@ namespace GentleTouch
             #endregion
 
             _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
-                () => _config.MaxAetherCurrentSenseDistance, () => _pluginInterface.ClientState.LocalPlayer,
+                () => _config.MaxAetherCurrentSenseDistanceSquared, () => _pluginInterface.ClientState.LocalPlayer,
                 () => _pluginInterface.ClientState.Actors);
             pi.CommandManager.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(null!, null!); })
             {

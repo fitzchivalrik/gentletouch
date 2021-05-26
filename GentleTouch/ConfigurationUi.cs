@@ -763,8 +763,10 @@ namespace GentleTouch
             {
                 ImGui.Indent();
                 ImGui.SetNextItemWidth(250 * scale);
-                changed |= ImGui.SliderInt("##AetherSenseDistance", ref config.MaxAetherCurrentSenseDistance, 5, 115,
+                var distance = (int)Math.Sqrt(config.MaxAetherCurrentSenseDistanceSquared);
+                changed |= ImGui.SliderInt("##AetherSenseDistance", ref distance, 5, 115,
                     "Max Sense Distance %d");
+                config.MaxAetherCurrentSenseDistanceSquared = distance * distance;
                 ImGui.Unindent();
             }
 

@@ -18,7 +18,7 @@ namespace GentleTouch.Triggers
             "風脈の泉"
         };
         private IEnumerator<VibrationPattern.Step?>? _enumerator;
-        private readonly Func<int> _getMaxAetherCurrentSenseDistance;
+        private readonly Func<int> _getMaxAetherCurrentSenseDistanceSquared;
         private readonly Func<PlayerCharacter?> _getLocalPlayer;
         private readonly Func<ActorTable> _getActors;
         
@@ -42,7 +42,7 @@ namespace GentleTouch.Triggers
             (Func<int> getMaxAetherCurrentSenseDistance, Func<PlayerCharacter?> getLocalPlayer, Func<ActorTable> getActors,
             int priority, VibrationPattern pattern)
             : base(priority, pattern) =>
-            (_getMaxAetherCurrentSenseDistance, _getLocalPlayer, _getActors) 
+            (_getMaxAetherCurrentSenseDistanceSquared, _getLocalPlayer, _getActors) 
             = (getMaxAetherCurrentSenseDistance, getLocalPlayer, getActors);
         
 
@@ -72,7 +72,7 @@ namespace GentleTouch.Triggers
 
                 
                 // NOTE (Chiv) This is faster then using LINQ (~0.0060ms)
-                var distance = float.MaxValue;
+                var distanceSquared = float.MaxValue;
                 foreach (var a in _getActors())
                 {
                     
@@ -82,15 +82,13 @@ namespace GentleTouch.Triggers
                         // NOTE: This byte is SET(!=0) if _invisible_ i.e. if the player already collected
                         &&  ReadByte(a.Address, 0x105)  == 0)
                     {
-                        var d = (float)Math.Sqrt(Math.Pow(localPlayer.Position.X - a.Position.X, 2)
-                                           + Math.Pow(localPlayer.Position.Y - a.Position.Y, 2)
-                                           + Math.Pow(localPlayer.Position.Z - a.Position.Z, 2));
-                        if (d < distance)
-                            distance = d;
+                        var d = Vector3.DistanceSquared(localPlayer.Position, a.Position);
+                        if (d < distanceSquared)
+                            distanceSquared = d;
                     }
                 }
 
-                if (distance > _getMaxAetherCurrentSenseDistance())
+                if (distanceSquared > _getMaxAetherCurrentSenseDistanceSquared())
                 {
                     yield return null;
                     continue;
@@ -100,7 +98,7 @@ namespace GentleTouch.Triggers
                 while (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < nextTimeStep)
                     yield return null;
                 // Silence after the vibration depends on distance to Aether Current
-                var msTillNextStep = Math.Max((long) (800L * (distance / _getMaxAetherCurrentSenseDistance())),
+                var msTillNextStep = Math.Max((long) (800L * (distanceSquared / _getMaxAetherCurrentSenseDistanceSquared())),
                     10L);
                 nextTimeStep = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + msTillNextStep;
                 yield return Pattern.Steps[1];
