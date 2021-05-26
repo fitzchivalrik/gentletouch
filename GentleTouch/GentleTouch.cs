@@ -163,49 +163,7 @@ namespace GentleTouch
                 );
             var allActions = actions.Concat(gcdActions);
             _allActions = allActions as FFXIVAction[] ?? allActions.ToArray();
-
-            #region BreakingConfigurationVersionMigration
-
-            //TODO Remove before v1.0
-            if (config.Version == 0)
-            {
-                // Risk Bool Migration
-                if (config.RisksAcknowledged)
-                {
-                    config.OnboardingStep = Onboarding.Done;
-                }
-
-                // GCD Migration
-                var gcdTrigger = _config.CooldownTriggers.FirstOrDefault(t => t.JobId == 0);
-                if (gcdTrigger is not null)
-                {
-                    _config.CooldownTriggers.Remove(gcdTrigger);
-                    for (var i = 0; i < config.CooldownTriggers.Count; i++)
-                        config.CooldownTriggers[i].Priority = i;
-                    foreach (var job in _jobs)
-                    {
-                        var action = _allActions
-                            .Where(a => a.CooldownGroup == CooldownTrigger.GCDCooldownGroup)
-                            .First(a => a.ClassJobCategory.Value.HasClass(job.RowId));
-                        var lastTrigger = _config.CooldownTriggers.LastOrDefault();
-                        _config.CooldownTriggers.Add(
-                            new CooldownTrigger(
-                                job.RowId,
-                                action.Name,
-                                action.RowId,
-                                action.CooldownGroup,
-                                lastTrigger?.Priority + 1 ?? 0,
-                                gcdTrigger.Pattern
-                            ));
-                    }
-                }
-
-                config.Version = 1;
-                _pluginInterface.SavePluginConfig(_config);
-            }
-
-            #endregion
-
+            
             #endregion
 
             _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(

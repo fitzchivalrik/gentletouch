@@ -8,9 +8,6 @@ namespace GentleTouch
     {
         public readonly IList<CooldownTrigger> CooldownTriggers = new List<CooldownTrigger>();
         public readonly IList<VibrationPattern> Patterns = new List<VibrationPattern>();
-
-        // TODO Remove in Version 2
-        public bool RisksAcknowledged;
         
         public Onboarding OnboardingStep;
         public bool NoVibrationWithSheathedWeapon;
@@ -18,7 +15,7 @@ namespace GentleTouch
         public bool SenseAetherCurrents;
         public int MaxAetherCurrentSenseDistanceSquared = 100 * 100;
 
-        public int Version { get; set; } = 1;
+        public int Version { get; set; } = 2;
     }
 
     public enum Onboarding
