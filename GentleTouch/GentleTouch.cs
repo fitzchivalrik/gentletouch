@@ -24,11 +24,13 @@ namespace GentleTouch
         private const string Command = "/gentle";
         public const string PluginName = "GentleTouch";
 
+        //NOTE (Chiv) RowId of ClassJob sheet
         private static readonly HashSet<uint> JobsWhitelist = new()
         {
             19,20,21,22,23,24,25,27,28,30,31,32,33,34,35,36,37,38
         };
 
+        //NOTE (Chiv) RowId of ClassJobCategory sheet
         private static readonly HashSet<uint> JobCategoryWhitelist = new()
         {
             20,21,22,23,24,25,26,28,29,92,96,98,99,111,112,129,149,150
@@ -119,7 +121,6 @@ namespace GentleTouch
             // TODO (Chiv) Better in custom Serializer?
             foreach (var trigger in _config.CooldownTriggers)
             {
-                //TODO (Chiv) Error handling if something messed up guids.
                 trigger.Pattern = _config.Patterns.FirstOrDefault(p => p.Guid == trigger.PatternGuid) ??
                                   new VibrationPattern();
             }

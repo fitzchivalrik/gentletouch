@@ -283,7 +283,7 @@ namespace GentleTouch
         private static bool DrawTriggerTab(Configuration config, DalamudPluginInterface pi, float scale,
             IEnumerable<ClassJob> jobs, IReadOnlyCollection<FFXIVAction> allActions)
         {
-            if (!ImGui.BeginTabItem("Triggers")) return false;
+            if (!ImGui.BeginTabItem("Cooldown Triggers")) return false;
             var changed = false;
             changed |= DrawCooldownTriggers(config, scale, jobs, allActions);
             ImGui.EndTabItem();
@@ -295,7 +295,13 @@ namespace GentleTouch
         {
             var changed = false;
             const FontAwesomeIcon dragDropMarker = FontAwesomeIcon.Sort;
-            if (!ImGui.CollapsingHeader("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.DefaultOpen)) return changed;
+            //if (!ImGui.CollapsingHeader("Cooldown Triggers (work only in combat)", ImGuiTreeNodeFlags.DefaultOpen)) return changed;
+            ImGui.AlignTextToFramePadding();
+            ImGui.Text("Only working in combat. Ordered by priority; to swap, Drag'n'Drop on");
+            ImGui.SameLine();
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.Text(dragDropMarker.ToIconString());
+            ImGui.PopFont();
             if (ImGui.Button("Add new Cooldown Trigger"))
             {
                 var lastTrigger = config.CooldownTriggers.LastOrDefault();
@@ -313,13 +319,6 @@ namespace GentleTouch
                 changed = true;
             }
 
-            ImGui.SameLine();
-            ImGui.AlignTextToFramePadding();
-            ImGui.Text($"Ordered by priority. To swap, Drag and Drop on");
-            ImGui.SameLine();
-            ImGui.PushFont(UiBuilder.IconFont);
-            ImGui.Text(dragDropMarker.ToIconString());
-            ImGui.PopFont();
             int[] toSwap = {0, 0};
             //TODO (Chiv) This can be a single item, can't it?
             var toRemoveTrigger = new List<CooldownTrigger>();
@@ -367,9 +366,9 @@ namespace GentleTouch
             if (!ImGui.BeginTabItem(job.NameEnglish)) return false;
             var changed = false;
             ImGui.Indent();
-            ImGui.Indent(27 * scale);
+            ImGui.Indent(28 * scale);
             ImGui.Text("Action");
-            ImGui.SameLine(197 * scale);
+            ImGui.SameLine(215 * scale);
             ImGui.Text("Pattern");
             ImGui.Unindent(27 * scale);
             _currentJobTabId = job.RowId;
@@ -396,7 +395,7 @@ namespace GentleTouch
                     ImGui.SameLine();
                     ImGui.Text($"J:{trigger.JobId:00} A:{trigger.ActionId:0000} ");
 #endif
-                    ImGui.PushItemWidth(135 * scale);
+                    ImGui.PushItemWidth(150 * scale);
                     ImGui.SameLine();
                     changed |= DrawActionCombo(actions, trigger);
                     ImGui.SameLine();

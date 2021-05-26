@@ -16,7 +16,7 @@ namespace GentleTouch
         public bool NoVibrationWithSheathedWeapon;
         public bool NoVibrationDuringCasting;
         public bool SenseAetherCurrents;
-        public int MaxAetherCurrentSenseDistance = 100;
+        public int MaxAetherCurrentSenseDistanceSquared = 100 * 100;
 
         public int Version { get; set; } = 1;
     }

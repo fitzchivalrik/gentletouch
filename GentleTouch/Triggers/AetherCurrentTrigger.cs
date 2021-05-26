@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Game.ClientState.Actors;
@@ -53,12 +55,9 @@ namespace GentleTouch.Triggers
             return _enumerator;
         }
         
-        private static unsafe byte ReadByte(IntPtr ptr, int ofs)
-        {
-
-            return *(byte*) (ptr + ofs);
-
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe byte ReadByte(IntPtr ptr, int ofs) => *(byte*) (ptr + ofs);
+        
         private IEnumerator<VibrationPattern.Step?> CreateEnumerator()
         {
             while (true)
