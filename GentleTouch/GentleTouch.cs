@@ -16,7 +16,6 @@ using GentleTouch.Triggers;
 using Lumina.Excel.GeneratedSheets;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
-// TODO 5 Refactor DrawCombo to generic
 namespace GentleTouch
 {
     public partial class GentleTouch : IDisposable
@@ -422,17 +421,8 @@ namespace GentleTouch
         private int ControllerPollDetour(nint maybeControllerStruct)
         {
             _maybeControllerStruct = maybeControllerStruct;
-#if DEBUG
-            var original = _controllerPoll.Original(maybeControllerStruct);
-            _lastReturnedFromPoll[_currentIndex++ % _lastReturnedFromPoll.Length] = original;
-            // TODO (Chiv) Interpretation happens inside method, log appears after map (0x40 = Square/X)
-            //if(original is 0x40) PluginLog.Warning("Should block!");
-            //return original is 0x40 ? 0 : original;
-            return original;
-#else
             _controllerPoll.Disable();
             return _controllerPoll.Original(maybeControllerStruct);
-#endif
         }
 
         #region UI

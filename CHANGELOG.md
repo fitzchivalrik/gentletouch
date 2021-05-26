@@ -1,5 +1,14 @@
 ﻿# CHANGELOG
 
+## 1.0.0
+
+- feat: Release
+- fix: Various under-the-hood stuff
+
+## 0.8.0 (testing)
+
+- feat: Update to API3 & 5.5
+
 ## 0.7.2 (testing)
 
 - fix: Removed conditions which are always active in duty.

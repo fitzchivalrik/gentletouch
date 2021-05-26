@@ -320,7 +320,6 @@ namespace GentleTouch
             }
 
             int[] toSwap = {0, 0};
-            //TODO (Chiv) This can be a single item, can't it?
             var toRemoveTrigger = new List<CooldownTrigger>();
 
             const ImGuiTabBarFlags tabBarFlags = ImGuiTabBarFlags.Reorderable
@@ -562,7 +561,6 @@ namespace GentleTouch
             }
 
             ImGui.Separator();
-            //TODO (Chiv) Single Item suffice?
             var toRemovePatterns = new List<VibrationPattern>();
             foreach (var pattern in config.Patterns)
             {
@@ -636,14 +634,10 @@ namespace GentleTouch
             }
 
             ImGui.PopFont();
-            // TODO  (Chiv) Single item suffice?
             var toRemoveSteps = new List<int>();
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
             ImGui.Text("Steps");
-            // TODO (Chiv) Ability to hide steps needed/desired?
-            //if (ImGui.TreeNodeEx($"Steps", ImGuiTreeNodeFlags.DefaultOpen))
-            //{
             for (var i = 0; i < pattern.Steps.Count; i++)
             {
                 ImGui.PushID(i);
@@ -661,12 +655,9 @@ namespace GentleTouch
                     changed = true;
                 }
 
-                //changed = DrawVerticalStep(scale, toRemoveSteps, i, s);
                 ImGui.PopID();
             }
 
-            // ImGui.TreePop();
-            //}
             foreach (var i in toRemoveSteps) pattern.Steps.RemoveAt(i);
             ImGui.TreePop();
             return changed;
