@@ -3,7 +3,12 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Game.ClientState;
-using Dalamud.Game.ClientState.Actors;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.Gui;
+using Dalamud.IoC;
 using GentleTouch.Triggers;
 using ImGuiNET;
 
@@ -12,6 +17,10 @@ namespace GentleTouch
 {
     public partial class GentleTouch
     {
+        
+        [PluginService]
+        [RequiredVersion("1.0")]
+        private static GameGui _gameGui { get; set; }
         private void DrawDebugUi()
         {
             //ImGui.PushStyleColor(ImGuiCol.WindowBg, 0xFF000000);
@@ -61,7 +70,7 @@ namespace GentleTouch
 
             for (var i = 0; i < Condition.MaxConditionEntries; i++) {
                 var typedCondition = (ConditionFlag) i;
-                var cond = _pluginInterface.ClientState.Condition[typedCondition];
+                var cond = _condition[typedCondition];
 
                 if (!cond) {
                     continue;
@@ -95,45 +104,48 @@ namespace GentleTouch
             ImGui.Text($"ActionID: {cooldown.ActionID}");
             ImGui.Separator();
             
-            var localPlayer = _pluginInterface.ClientState.LocalPlayer;
+            if (_objects[0] is not PlayerCharacter localPlayer)
+            {
+                return;
+            }
             ImGui.Text($"CurrentEnumerator: {_currentEnumerator}");
             
-            for(var i = 0; i < _pluginInterface.ClientState.Actors.Length; i ++)
+            for(var i = 0; i < _objects.Length; i ++)
             {
-                var actor = _pluginInterface.ClientState.Actors[i];
-                if  (actor is null) continue;
-                if (actor.ObjectKind != ObjectKind.EventObj) continue;
+                var gameObject = _objects[i];
+                if  (gameObject is null) continue;
+                if (gameObject.ObjectKind != ObjectKind.EventObj) continue;
                 //if (!_aetherCurrentNameWhitelist.Contains(actor.Name)) continue;
                 // IF set (!=0), its invisible
-                var visible = Marshal.ReadByte(actor.Address, 0x105);
-                var direction = _pluginInterface.ClientState.LocalPlayer.Position.Z - actor.Position.Z > 3
+                var visible = Marshal.ReadByte(gameObject.Address, 0x105);
+                var direction = localPlayer.Position.Z - gameObject.Position.Z > 3
                     ? "DOWN"
                     : "UP";
-                var actualDistance = actor.YalmDistanceX != 0
-                    ? actor.YalmDistanceX
-                    : Math.Sqrt(Math.Pow(localPlayer.Position.X - actor.Position.X, 2)
-                                + Math.Pow(localPlayer.Position.Y - actor.Position.Y, 2)
-                                + Math.Pow(localPlayer.Position.Z - actor.Position.Z, 2));
+                var actualDistance = gameObject.YalmDistanceX != 0
+                    ? gameObject.YalmDistanceX
+                    : Math.Sqrt(Math.Pow(localPlayer.Position.X - gameObject.Position.X, 2)
+                                + Math.Pow(localPlayer.Position.Y - gameObject.Position.Y, 2)
+                                + Math.Pow(localPlayer.Position.Z - gameObject.Position.Z, 2));
 
                 //TODO So long as its not fixed in Dalamud
-                var actorName = Encoding.UTF8.GetString(Encoding.Default.GetBytes(actor.Name));
-                ImGui.Text($"{actor.ActorId}:{actorName}" +
-                           $" ({actor.Position.X},{actor.Position.Y},{actor.Position.Z})" +
-                           $" ({actor.Rotation})" +
-                           $" ({actor.YalmDistanceX},{actor.YalmDistanceY})" +
+                var gameObjectName = gameObject.Name.TextValue;
+                ImGui.Text($"{gameObject.ObjectId}:{gameObjectName}" +
+                           $" ({gameObject.Position.X},{gameObject.Position.Y},{gameObject.Position.Z})" +
+                           $" ({gameObject.Rotation})" +
+                           $" ({gameObject.YalmDistanceX},{gameObject.YalmDistanceZ})" +
                            $" {direction}" +
                            $" RenderMode {visible:X}" +
                            $" Dis {actualDistance}");
 
                 if(!_config.SenseAetherCurrents) continue;
-                if (!_pluginInterface.Framework.Gui.WorldToScreen(actor.Position, out var screenCoords)) continue;
+                if (!_gameGui.WorldToScreen(gameObject.Position, out var screenCoords)) continue;
                 
-                if (actualDistance > _config.MaxAetherCurrentSenseDistance)
+                if (actualDistance > _config.MaxAetherCurrentSenseDistanceSquared)
                     continue;
                 ImGui.PushID(i);
                 ImGui.SetNextWindowPos(new Vector2(screenCoords.X, screenCoords.Y));
                 ImGui.SetNextWindowBgAlpha(
-                    (float)Math.Max(1 - (actualDistance / _config.MaxAetherCurrentSenseDistance), 0.2));
+                    (float)Math.Max(1 - (actualDistance / _config.MaxAetherCurrentSenseDistanceSquared), 0.2));
                 if (ImGui.Begin("Actor" + i,
                     ImGuiWindowFlags.NoDecoration |
                     ImGuiWindowFlags.AlwaysAutoResize |
@@ -141,7 +153,7 @@ namespace GentleTouch
                     ImGuiWindowFlags.NoMouseInputs |
                     ImGuiWindowFlags.NoFocusOnAppearing | ImGuiWindowFlags.NoNav)) {
                     ImGui.Text(
-                        $"{actor.Address.ToInt64():X}-{actor.ActorId:X}[{i}] - {actor.ObjectKind} - {actorName} - {actualDistance} RenderMode {visible:X}");
+                        $"{gameObject.Address.ToInt64():X}-{gameObject.ObjectId:X}[{i}] - {gameObject.ObjectKind} - {gameObjectName} - {actualDistance} RenderMode {visible:X}");
                     ImGui.End();
                 }
                 ImGui.PopID();

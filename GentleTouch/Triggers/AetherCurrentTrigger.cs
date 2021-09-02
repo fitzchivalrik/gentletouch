@@ -5,8 +5,10 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using Dalamud.Game.ClientState.Actors;
-using Dalamud.Game.ClientState.Actors.Types;
+using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 
 namespace GentleTouch.Triggers
 {
@@ -22,12 +24,12 @@ namespace GentleTouch.Triggers
         private IEnumerator<VibrationPattern.Step?>? _enumerator;
         private readonly Func<int> _getMaxAetherCurrentSenseDistanceSquared;
         private readonly Func<PlayerCharacter?> _getLocalPlayer;
-        private readonly Func<ActorTable> _getActors;
+        private readonly Func<ObjectTable> _getObjects;
         
         internal static AetherCurrentTrigger 
-            CreateAetherCurrentTrigger(Func<int> getMaxAetherCurrentSenseDistance, Func<PlayerCharacter?> getLocalPlayer, Func<ActorTable> getActors) =>
+            CreateAetherCurrentTrigger(Func<int> getMaxAetherCurrentSenseDistance, Func<PlayerCharacter?> getLocalPlayer, Func<ObjectTable> getObjects) =>
             new(
-                getMaxAetherCurrentSenseDistance, getLocalPlayer, getActors,
+                getMaxAetherCurrentSenseDistance, getLocalPlayer, getObjects,
                 -1, new VibrationPattern()
             {
                 Infinite = true,
@@ -41,11 +43,11 @@ namespace GentleTouch.Triggers
             );
 
         private AetherCurrentTrigger
-            (Func<int> getMaxAetherCurrentSenseDistance, Func<PlayerCharacter?> getLocalPlayer, Func<ActorTable> getActors,
+            (Func<int> getMaxAetherCurrentSenseDistance, Func<PlayerCharacter?> getLocalPlayer, Func<ObjectTable> getObjects,
             int priority, VibrationPattern pattern)
             : base(priority, pattern) =>
-            (_getMaxAetherCurrentSenseDistanceSquared, _getLocalPlayer, _getActors) 
-            = (getMaxAetherCurrentSenseDistance, getLocalPlayer, getActors);
+            (_getMaxAetherCurrentSenseDistanceSquared, _getLocalPlayer, _getObjects) 
+            = (getMaxAetherCurrentSenseDistance, getLocalPlayer, getObjects);
         
 
         protected internal override IEnumerator<VibrationPattern.Step?> GetEnumerator()
@@ -72,12 +74,12 @@ namespace GentleTouch.Triggers
                 
                 // NOTE (Chiv) This is faster then using LINQ (~0.0060ms)
                 var distanceSquared = float.MaxValue;
-                foreach (var a in _getActors())
+                foreach (var a in _getObjects())
                 {
                     
                     // NOTE (Chiv) ActorTable.GetEnumerator() checks for null
                     if (a.ObjectKind == ObjectKind.EventObj 
-                        && _aetherCurrentNameWhitelist.Contains(Encoding.UTF8.GetString(Encoding.Default.GetBytes(a.Name)))
+                        && _aetherCurrentNameWhitelist.Contains(a.Name.TextValue)
                         // NOTE: This byte is SET(!=0) if _invisible_ i.e. if the player already collected
                         &&  ReadByte(a.Address, 0x105)  == 0)
                     {

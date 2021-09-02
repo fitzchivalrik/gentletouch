@@ -3,25 +3,33 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using Dalamud.Data;
+using Dalamud.Game;
 using Dalamud.Game.ClientState;
-using Dalamud.Game.ClientState.Actors;
-using Dalamud.Game.ClientState.Actors.Types;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
 using Dalamud.Game.Internal;
 using Dalamud.Hooking;
+using Dalamud.Logging;
 using Dalamud.Plugin;
 using GentleTouch.Collection;
 using GentleTouch.Interop;
 using GentleTouch.Triggers;
 using Lumina.Excel.GeneratedSheets;
+using Condition = Dalamud.Game.ClientState.Conditions.Condition;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 namespace GentleTouch
 {
-    public partial class GentleTouch : IDisposable
+    public partial class GentleTouch : IDalamudPlugin
     {
         private const string Command = "/gentle";
         public const string PluginName = "GentleTouch";
+        public string Name => PluginName;
 
         //NOTE (Chiv) RowId of ClassJob sheet
         private static readonly HashSet<uint> JobsWhitelist = new()
@@ -56,6 +64,11 @@ namespace GentleTouch
         private readonly nint _actionManager;
         private readonly GetActionCooldownSlot _getActionCooldownSlot;
         private readonly DalamudPluginInterface _pluginInterface;
+        private readonly ClientState _clientState;
+        private readonly ObjectTable _objects;
+        private readonly Framework _framework;
+        private readonly CommandManager _commands;
+        private readonly Condition _condition;
         private readonly IReadOnlyCollection<ClassJob> _jobs;
         private readonly IReadOnlyCollection<FFXIVAction> _allActions;
         private readonly PriorityQueue<CooldownTrigger, int> _queue = new();
@@ -86,10 +99,42 @@ namespace GentleTouch
         private bool _isDisposed;
 
 
-        public GentleTouch(DalamudPluginInterface pi, Configuration config)
+        /*
+         * DalamudPluginInterface pluginInterface,
+        BuddyList buddies,
+        ChatGui chat,
+        ChatHandlers chatHandlers,
+        ClientState clientState,
+        CommandManager commands,
+        Condition condition,
+        DataManager data,
+        FateTable fates,
+        FlyTextGui flyText,
+        Framework framework,
+        GameGui gameGui,
+        GameNetwork gameNetwork,
+        JobGauges gauges,
+        KeyState keyState,
+        LibcFunction libcFunction,
+        ObjectTable objects,
+        PartyFinderGui pfGui,
+        PartyList party,
+        SeStringManager seStringManager,
+        SigScanner sigScanner,
+        TargetManager targets,
+        ToastGui toasts
+         */
+        
+        public GentleTouch(DalamudPluginInterface pi
+            , SigScanner sigScanner
+            , ClientState clientState
+            , DataManager data
+            , ObjectTable objects
+            , CommandManager commands
+            , Framework framework
+            , Condition condition)
         {
             #region Signatures
-
             // NOTE (Chiv): Different signatures from different methods
             const string maybeControllerPollSignature =
                 "40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B";
@@ -112,9 +157,14 @@ namespace GentleTouch
             const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
 
             #endregion
-
-
+            
+            var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
             _pluginInterface = pi;
+            _clientState = clientState;
+            _commands = commands;
+            _objects = objects;
+            _framework = framework;
+            _condition = condition;
             _config = config;
             // NOTE (Chiv) Resolve pattern GUIDs to pattern
             // TODO (Chiv) Better in custom Serializer?
@@ -123,36 +173,38 @@ namespace GentleTouch
                 trigger.Pattern = _config.Patterns.FirstOrDefault(p => p.Guid == trigger.PatternGuid) ??
                                   new VibrationPattern();
             }
-
-            _pluginInterface.ClientState.OnLogin += OnLogin;
-            _pluginInterface.ClientState.OnLogout += OnLogout;
+            
+            _clientState.Login += OnLogin;
+            _clientState.Logout += OnLogout;
 
             #region Hooks, Functions and Addresses
 
+            
             _ffxivSetState = Marshal.GetDelegateForFunctionPointer<FFXIVSetState>(
-                _pluginInterface.TargetModuleScanner.ScanText(ffxivSetStateSignature));
+                sigScanner.ScanText(ffxivSetStateSignature));
             _xInputWrapperSetState = Marshal.GetDelegateForFunctionPointer<XInputWrapperSetState>(
-                _pluginInterface.TargetModuleScanner.ScanText(xInputWrapperSetStateSignature));
+                sigScanner.ScanText(xInputWrapperSetStateSignature));
             _controllerPoll = new Hook<MaybeControllerPoll>(
-                _pluginInterface.TargetModuleScanner.ScanText(maybeControllerPollSignature),
-                (MaybeControllerPoll) ControllerPollDetour);
+                sigScanner.ScanText(maybeControllerPollSignature),
+                ControllerPollDetour);
             _controllerPoll.Enable();
             _actionManager =
-                _pluginInterface.TargetModuleScanner.GetStaticAddressFromSig(actionManagerSignature);
+                sigScanner.GetStaticAddressFromSig(actionManagerSignature);
             _getActionCooldownSlot = Marshal.GetDelegateForFunctionPointer<GetActionCooldownSlot>(
-                _pluginInterface.TargetModuleScanner.ScanText(getActionCooldownSlotSignature));
+                sigScanner.ScanText(getActionCooldownSlotSignature));
 
             #endregion
 
             #region Excel Data
-
-            _jobs = _pluginInterface.Data.Excel.GetSheet<ClassJob>()
+            
+            //TODO Handle potential nulls
+            _jobs = data.Excel.GetSheet<ClassJob>()
                 .Where(j => JobsWhitelist.Contains(j.RowId))
                 .ToArray();
-            var actions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
+            var actions = data.Excel.GetSheet<FFXIVAction>()
                 .Where(a => a.IsPlayerAction && a.CooldownGroup != CooldownTrigger.GCDCooldownGroup &&
                             !a.IsPvP);
-            var gcdActions = _pluginInterface.Data.Excel.GetSheet<FFXIVAction>()
+            var gcdActions = data.Excel.GetSheet<FFXIVAction>()
                 .Where(a =>
                     a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == CooldownTrigger.GCDCooldownGroup
                     && !a.IsRoleAction && JobCategoryWhitelist.Contains(a.ClassJobCategory.Row))
@@ -166,16 +218,15 @@ namespace GentleTouch
             #endregion
 
             _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
-                () => _config.MaxAetherCurrentSenseDistanceSquared, () => _pluginInterface.ClientState.LocalPlayer,
-                () => _pluginInterface.ClientState.Actors);
-            pi.CommandManager.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(null!, null!); })
+                () => _config.MaxAetherCurrentSenseDistanceSquared, () => _objects[0] as PlayerCharacter,
+                () => _objects);
+            _commands.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(); })
             {
                 HelpMessage = "Open GentleTouch configuration menu.",
                 ShowInHelp = true
             });
-            
-#if DEBUG
-            if (_pluginInterface.ClientState.LocalPlayer is not null)
+#if !DEBUG
+            if (_clientState.LocalPlayer is not null)
             {
                 OnLogin(null!, null!);
             }
@@ -191,12 +242,12 @@ namespace GentleTouch
             
         }
 
-        private void OnLogout(object sender, EventArgs e)
+        private void OnLogout(object? sender, EventArgs e)
         {
-            _pluginInterface.UiBuilder.OnOpenConfigUi -= OnOpenConfigUi;
-            _pluginInterface.UiBuilder.OnBuildUi -= BuildUi;
-            _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
-            _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+            _pluginInterface.UiBuilder.OpenConfigUi -= OnOpenConfigUi;
+            _pluginInterface.UiBuilder.Draw -= DrawUi;
+            _framework.Update -= FrameworkOutOfCombatUpdate;
+            _framework.Update -= FrameworkInCombatUpdate;
             ControllerSetState(0,0);
             _currentEnumerator?.Dispose();
             _currentEnumerator = null;
@@ -204,44 +255,46 @@ namespace GentleTouch
             _queue.Clear();
         }
 
-        private void OnLogin(object sender, EventArgs e)
+        private void OnLogin(object? sender, EventArgs e)
         {
-            _pluginInterface.UiBuilder.OnOpenConfigUi += OnOpenConfigUi;
-            _pluginInterface.UiBuilder.OnBuildUi += BuildUi;
-            _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
+            _pluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
+            _pluginInterface.UiBuilder.Draw += DrawUi;
+            _framework.Update += FrameworkOutOfCombatUpdate;
         }
         
         private void FrameworkInCombatUpdate(Framework framework)
         {
-            if (!_pluginInterface.ClientState.Condition[ConditionFlag.InCombat]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent])
+            if (!_condition[ConditionFlag.InCombat]
+                || _condition[ConditionFlag.Unconscious] 
+                || _condition[ConditionFlag.WatchingCutscene]
+                || _condition[ConditionFlag.WatchingCutscene78]
+                || _condition[ConditionFlag.OccupiedInCutSceneEvent])
             {
                 ResetQueueAndTriggers();
-                _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
-                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+                _framework.Update += FrameworkOutOfCombatUpdate;
+                _framework.Update -= FrameworkInCombatUpdate;
                 return;
             }
 
+            // We are in combat, it will not be Null
+            var localPlayer = (_objects[0] as PlayerCharacter)!;
             var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                                 !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+                                 !localPlayer!.IsStatus(StatusFlags.WeaponOut);
             if (weaponSheathed)
             {
                 ControllerSetState(0, 0);
-                _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatPauseUpdate;
-                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+                _framework.Update += FrameworkInCombatPauseUpdate;
+                _framework.Update -= FrameworkInCombatUpdate;
                 return;
             }
 
             var casting = _config.NoVibrationDuringCasting &&
-                          _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
+                          localPlayer.IsStatus(StatusFlags. IsCasting);
             if (casting)
             {
                 ControllerSetState(0, 0);
-                _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatPauseUpdate;
-                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatUpdate;
+                _framework.Update += FrameworkInCombatPauseUpdate;
+                _framework.Update -= FrameworkInCombatUpdate;
                 return;
             }
 
@@ -252,32 +305,34 @@ namespace GentleTouch
 
         private void FrameworkInCombatPauseUpdate(Framework framework)
         {
-            if (!_pluginInterface.ClientState.Condition[ConditionFlag.InCombat]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.Unconscious] 
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent])
+            if (!_condition[ConditionFlag.InCombat]
+                || _condition[ConditionFlag.Unconscious] 
+                || _condition[ConditionFlag.WatchingCutscene]
+                || _condition[ConditionFlag.WatchingCutscene78]
+                || _condition[ConditionFlag.OccupiedInCutSceneEvent])
             {
                 ResetQueueAndTriggers();
-                _pluginInterface.Framework.OnUpdateEvent += FrameworkOutOfCombatUpdate;
-                _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatPauseUpdate;
+                _framework.Update += FrameworkOutOfCombatUpdate;
+                _framework.Update -= FrameworkInCombatPauseUpdate;
             }
 
+            // We are in combat, it will not be Null
+            var localPlayer = (_objects[0] as PlayerCharacter)!;
             var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                                 !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+                                 !localPlayer.IsStatus(StatusFlags.WeaponOut);
             if (weaponSheathed)
             {
                 return;
             }
 
             var casting = _config.NoVibrationDuringCasting &&
-                          _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
+                          localPlayer.IsStatus(StatusFlags.IsCasting);
             if (casting)
             {
                 return;
             }
-            _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
-            _pluginInterface.Framework.OnUpdateEvent -= FrameworkInCombatPauseUpdate;
+            _framework.Update += FrameworkInCombatUpdate;
+            _framework.Update -= FrameworkInCombatPauseUpdate;
         }
 
         private void ResetQueueAndTriggers()
@@ -327,7 +382,9 @@ namespace GentleTouch
 
         private void EnqueueCooldownTriggers()
         {
-            var currentJobId = _pluginInterface.ClientState.LocalPlayer.ClassJob.Id;
+            
+            var localPlayer = (_objects[0] as PlayerCharacter);
+            var currentJobId = localPlayer?.ClassJob.Id ?? 0;
 
             foreach (var t in _config.CooldownTriggers)
             {
@@ -360,15 +417,15 @@ namespace GentleTouch
 
         private void FrameworkOutOfCombatUpdate(Framework framework)
         {
-            if (_pluginInterface.ClientState.Condition[ConditionFlag.Unconscious]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.WatchingCutscene78]
-                || _pluginInterface.ClientState.Condition[ConditionFlag.OccupiedInCutSceneEvent])
+            if (_condition[ConditionFlag.Unconscious]
+                || _condition[ConditionFlag.WatchingCutscene]
+                || _condition[ConditionFlag.WatchingCutscene78]
+                || _condition[ConditionFlag.OccupiedInCutSceneEvent])
             {
                 return;
             }
             
-            var inCombat = _pluginInterface.ClientState.Condition[ConditionFlag.InCombat];
+            var inCombat = _condition[ConditionFlag.InCombat];
             if (!inCombat)
             {
                 switch (_config.SenseAetherCurrents)
@@ -385,17 +442,22 @@ namespace GentleTouch
                 CheckAndVibrate();
                 return;
             }
+
+            if (_objects[0] is not PlayerCharacter localPlayer)
+            {
+                return;
+            }
             
             var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                                 !_pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.WeaponOut);
+                                 !localPlayer.IsStatus(StatusFlags.WeaponOut);
             if (weaponSheathed) return;
             var casting = _config.NoVibrationDuringCasting &&
-                          _pluginInterface.ClientState.LocalPlayer!.IsStatus(StatusFlags.Casting);
+                          localPlayer.IsStatus(StatusFlags.IsCasting);
             if (casting) return;
             _currentEnumerator = null;
             ControllerSetState(0, 0);
-            _pluginInterface.Framework.OnUpdateEvent += FrameworkInCombatUpdate;
-            _pluginInterface.Framework.OnUpdateEvent -= FrameworkOutOfCombatUpdate;
+            _framework.Update += FrameworkInCombatUpdate;
+            _framework.Update -= FrameworkOutOfCombatUpdate;
         }
 
         private void ControllerSetState(int leftMotorPercentage, int rightMotorPercentage, bool direct = false,
@@ -427,7 +489,7 @@ namespace GentleTouch
 
         #region UI
 
-        private void BuildUi()
+        private void DrawUi()
         {
             // TODO (Chiv) Refactor to add/remove UI Event instead of boolean
             _shouldDrawConfigUi = _shouldDrawConfigUi &&
@@ -438,7 +500,7 @@ namespace GentleTouch
 #endif
         }
 
-        private void OnOpenConfigUi(object sender, EventArgs e)
+        private void OnOpenConfigUi()
         {
             _shouldDrawConfigUi = !_shouldDrawConfigUi;
         }
@@ -461,9 +523,9 @@ namespace GentleTouch
                 // TODO (Chiv) Still not quite sure about correct dispose
                 // NOTE (Chiv) Explicit, non GC? call - remove managed thingies too.
                 OnLogout(null!, null!);
-                _pluginInterface.ClientState.OnLogin -= OnLogin;
-                _pluginInterface.ClientState.OnLogout -= OnLogout;
-                _pluginInterface.CommandManager.RemoveHandler(Command);
+                _clientState.Login -= OnLogin;
+                _clientState.Logout -= OnLogout;
+                _commands.RemoveHandler(Command);
             }
 
             // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.

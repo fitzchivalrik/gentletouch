@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Text;
 using Dalamud.Configuration;
 using Dalamud.Interface;
+using Dalamud.Logging;
 using Dalamud.Plugin;
 using GentleTouch.Interop;
 using GentleTouch.Triggers;

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using Dalamud.Game.ClientState.Actors.Types;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using Lumina.Excel.GeneratedSheets;
 
 /* NOTE (Chiv) From
@@ -9,25 +11,14 @@ using Lumina.Excel.GeneratedSheets;
 */
 namespace GentleTouch.Interop
 {
-    [Flags]
-    public enum StatusFlags : byte
-    {
-        None = 0,
-        Hostile = 1 << 0,
-        InCombat = 1 << 1,
-        WeaponOut = 1 << 2,
-        PartyMember = 1 << 4,
-        AllianceMember = 1 << 5,
-        Friend = 1 << 6,
-        Casting = 1 << 7
-    }
 
     public static class Extensions
     {
-        public static unsafe bool IsStatus(this Actor actor, StatusFlags flags)
+        public static bool IsStatus(this PlayerCharacter actor, StatusFlags flags)
         {
-            var f = *(byte*) (actor.Address + 0x19A0);
-            return (f & (byte) flags) > 0;
+            return (actor.StatusFlags & flags) > 0;
+            //var f = *(byte*) (actor.Address + 0x19A0);
+            //return (f & (byte) flags) > 0;
         }
 
         public static bool HasClass(this ClassJobCategory cjc, uint classJobRowId)
