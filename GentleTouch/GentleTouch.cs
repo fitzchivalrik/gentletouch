@@ -467,8 +467,8 @@ namespace GentleTouch
             }
 
             // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.
-            if (_controllerPoll.IsEnabled) _controllerPoll.Disable();
-            _controllerPoll.Dispose();
+            if (_controllerPoll?.IsEnabled ?? false) _controllerPoll.Disable();
+            _controllerPoll?.Dispose();
 
             _isDisposed = true;
         }
