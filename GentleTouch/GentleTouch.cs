@@ -218,8 +218,7 @@ namespace GentleTouch
             #endregion
 
             _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
-                () => _config.MaxAetherCurrentSenseDistanceSquared, () => _objects[0] as PlayerCharacter,
-                () => _objects);
+                () => _config.MaxAetherCurrentSenseDistanceSquared, _objects);
             _commands.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(); })
             {
                 HelpMessage = "Open GentleTouch configuration menu.",

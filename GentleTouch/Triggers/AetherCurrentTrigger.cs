@@ -9,6 +9,8 @@ using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Logging;
+using GameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
 
 namespace GentleTouch.Triggers
 {
@@ -22,14 +24,14 @@ namespace GentleTouch.Triggers
             "風脈の泉"
         };
         private IEnumerator<VibrationPattern.Step?>? _enumerator;
+        // TODO (Chiv) Change to Get/Set and update on config change?
         private readonly Func<int> _getMaxAetherCurrentSenseDistanceSquared;
-        private readonly Func<PlayerCharacter?> _getLocalPlayer;
-        private readonly Func<ObjectTable> _getObjects;
+        private readonly ObjectTable _objects;
         
         internal static AetherCurrentTrigger 
-            CreateAetherCurrentTrigger(Func<int> getMaxAetherCurrentSenseDistance, Func<PlayerCharacter?> getLocalPlayer, Func<ObjectTable> getObjects) =>
+            CreateAetherCurrentTrigger(Func<int> getMaxAetherCurrentSenseDistance, ObjectTable objects) =>
             new(
-                getMaxAetherCurrentSenseDistance, getLocalPlayer, getObjects,
+                getMaxAetherCurrentSenseDistance, objects,
                 -1, new VibrationPattern()
             {
                 Infinite = true,
@@ -43,11 +45,11 @@ namespace GentleTouch.Triggers
             );
 
         private AetherCurrentTrigger
-            (Func<int> getMaxAetherCurrentSenseDistance, Func<PlayerCharacter?> getLocalPlayer, Func<ObjectTable> getObjects,
+            (Func<int> getMaxAetherCurrentSenseDistance, ObjectTable objects,
             int priority, VibrationPattern pattern)
             : base(priority, pattern) =>
-            (_getMaxAetherCurrentSenseDistanceSquared, _getLocalPlayer, _getObjects) 
-            = (getMaxAetherCurrentSenseDistance, getLocalPlayer, getObjects);
+            (_getMaxAetherCurrentSenseDistanceSquared, _objects) 
+            = (getMaxAetherCurrentSenseDistance, objects);
         
 
         protected internal override IEnumerator<VibrationPattern.Step?> GetEnumerator()
@@ -59,35 +61,56 @@ namespace GentleTouch.Triggers
         
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe byte ReadByte(IntPtr ptr, int ofs) => *(byte*) (ptr + ofs);
-        
+
+        private unsafe float DistanceToClosestAetherCurrent()
+        {
+            // Methods does not get called if local player is null.
+            var localPlayer = (GameObject*)_objects.GetObjectAddress(0);
+            var localPlayerPosition =
+                new Vector3(localPlayer->Position.X, localPlayer->Position.Y, localPlayer->Position.Z);
+            var distanceSquared = float.MaxValue;
+            for (var i = 1; i < _objects.Length; i++)
+            {
+                var address = _objects.GetObjectAddress(i);
+                if (address == IntPtr.Zero)
+                    continue;
+                var obj = (GameObject*)address;
+                var objKind = (ObjectKind)obj->ObjectKind;
+                if (objKind != ObjectKind.EventObj || ReadByte(address, 0x105) == 0) continue;
+                var objName = GetName(obj);
+                if (!_aetherCurrentNameWhitelist.Contains(objName)) continue;
+                var objectPosition =
+                    new Vector3(obj->Position.X, obj->Position.Y, obj->Position.Z);
+                var d = Vector3.DistanceSquared(localPlayerPosition, objectPosition);
+                if (d < distanceSquared)
+                    distanceSquared = d;
+            }
+            return distanceSquared;
+        }
+
+        private static unsafe string GetName(GameObject* gameObject)
+        {
+            var length = 0;
+            var currentByte = gameObject->Name;
+            while (*currentByte != 0)
+            {
+                currentByte++;
+                length++;
+            }
+            return Encoding.UTF8.GetString(gameObject->Name, length);
+        }
+
         private IEnumerator<VibrationPattern.Step?> CreateEnumerator()
         {
             while (true)
             {
-                var localPlayer = _getLocalPlayer();
-                if (localPlayer is null)
+                if (_objects.GetObjectAddress(0) == IntPtr.Zero)
                 {
                     yield return null;
                     continue;
                 }
-
                 
-                // NOTE (Chiv) This is faster then using LINQ (~0.0060ms)
-                var distanceSquared = float.MaxValue;
-                foreach (var a in _getObjects())
-                {
-                    
-                    // NOTE (Chiv) ActorTable.GetEnumerator() checks for null
-                    if (a.ObjectKind == ObjectKind.EventObj 
-                        && _aetherCurrentNameWhitelist.Contains(a.Name.TextValue)
-                        // NOTE: This byte is SET(!=0) if _invisible_ i.e. if the player already collected
-                        &&  ReadByte(a.Address, 0x105)  == 0)
-                    {
-                        var d = Vector3.DistanceSquared(localPlayer.Position, a.Position);
-                        if (d < distanceSquared)
-                            distanceSquared = d;
-                    }
-                }
+                var distanceSquared = DistanceToClosestAetherCurrent();
 
                 if (distanceSquared > _getMaxAetherCurrentSenseDistanceSquared())
                 {
