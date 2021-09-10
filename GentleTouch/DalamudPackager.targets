@@ -7,6 +7,6 @@
                 AssemblyName="$(AssemblyName)"
                 MakeZip="true"
                 VersionComponents="3"
-                Exclude="GentleTouch.pdb"/>
+                Exclude="GentleTouch.pdb;GentleTouch.deps.json"/>
     </Target>
 </Project>
