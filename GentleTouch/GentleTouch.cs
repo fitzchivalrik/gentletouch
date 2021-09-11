@@ -223,21 +223,13 @@ namespace GentleTouch
                 HelpMessage = "Open GentleTouch configuration menu.",
                 ShowInHelp = true
             });
-#if !DEBUG
-            if (_clientState.LocalPlayer is not null)
+
+            // NOTE (Chiv) LocalPlayer != null => logged in, but plugin is just loading => do login logic
+            if(_clientState.LocalPlayer is not null)
             {
                 OnLogin(null!, null!);
             }
-#else
-            
-            if(_pluginInterface.Reason == PluginLoadReason.Installer 
-               //|| _pluginInterface.ClientState.LocalPlayer is not null
-               )
-            {
-                OnLogin(null!, null!);
-            }
-#endif
-            
+
         }
 
         private void OnLogout(object? sender, EventArgs e)
