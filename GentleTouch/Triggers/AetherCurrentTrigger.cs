@@ -76,7 +76,7 @@ namespace GentleTouch.Triggers
                     continue;
                 var obj = (GameObject*)address;
                 var objKind = (ObjectKind)obj->ObjectKind;
-                if (objKind != ObjectKind.EventObj || ReadByte(address, 0x105) == 0) continue;
+                if (objKind != ObjectKind.EventObj || ReadByte(address, 0x105) != 0) continue;
                 var objName = GetName(obj);
                 if (!_aetherCurrentNameWhitelist.Contains(objName)) continue;
                 var objectPosition =
