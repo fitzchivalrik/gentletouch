@@ -1,5 +1,12 @@
 ﻿# CHANGELOG
 
+## Unreleased
+
+## 1.2.2
+
+- feat: Update to API4
+- fix: Some small stuff + better performance for Aether Current sense
+
 ## 1.0.0
 
 - feat: Release
