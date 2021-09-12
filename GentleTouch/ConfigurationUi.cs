@@ -229,7 +229,7 @@ namespace GentleTouch
                                 action.RowId,
                                 action.CooldownGroup,
                                 lastTrigger?.Priority + 1 ?? 0,
-                                config.Patterns[1]
+                                config.Patterns[0]
                             ));
                     }
 
