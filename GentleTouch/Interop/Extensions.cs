@@ -17,8 +17,6 @@ namespace GentleTouch.Interop
         public static bool IsStatus(this PlayerCharacter actor, StatusFlags flags)
         {
             return (actor.StatusFlags & flags) > 0;
-            //var f = *(byte*) (actor.Address + 0x19A0);
-            //return (f & (byte) flags) > 0;
         }
 
         public static bool HasClass(this ClassJobCategory cjc, uint classJobRowId)
@@ -64,6 +62,8 @@ namespace GentleTouch.Interop
                 36 => cjc.BLU,
                 37 => cjc.GNB,
                 38 => cjc.DNC,
+                39 => cjc.RPR,
+                40 => cjc.SGE,
                 _ => false
             };
         }

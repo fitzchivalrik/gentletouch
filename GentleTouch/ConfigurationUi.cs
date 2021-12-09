@@ -178,8 +178,6 @@ namespace GentleTouch
                     config.CooldownTriggers.Add(new CooldownTrigger(
                         30, "Dream Within a Dream", 3566, 16, 0, config.Patterns[1]));
                     config.CooldownTriggers.Add(new CooldownTrigger(
-                        30, "Shadow Fang", 2257, 10, 1, config.Patterns[2]));
-                    config.CooldownTriggers.Add(new CooldownTrigger(
                         30, "Mug", 2248, 18, 2, config.Patterns[3]));
                     config.CooldownTriggers.Add(new CooldownTrigger(
                         19, "Fight or Flight", 20, 14, 3, config.Patterns[1]));

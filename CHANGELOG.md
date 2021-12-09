@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.3.0
+
+- feat: Update to API 5 and EW + Now works with DS4 (maybe even DS5?) thanks to the game adding support
+
 ## 1.2.2
 
 - feat: Update to API4

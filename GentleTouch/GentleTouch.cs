@@ -34,13 +34,13 @@ namespace GentleTouch
         //NOTE (Chiv) RowId of ClassJob sheet
         private static readonly HashSet<uint> JobsWhitelist = new()
         {
-            19,20,21,22,23,24,25,27,28,30,31,32,33,34,35,36,37,38
+            19,20,21,22,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39,40
         };
 
         //NOTE (Chiv) RowId of ClassJobCategory sheet
         private static readonly HashSet<uint> JobCategoryWhitelist = new()
         {
-            20,21,22,23,24,25,26,28,29,92,96,98,99,111,112,129,149,150
+            20,21,22,23,24,25,26,28,29,92,96,98,99,111,112,129,149,150,180,181
         };
 
         // TODO (Chiv): Check Right and Left Motor for x360/XOne Gamepad
