@@ -151,9 +151,9 @@ namespace GentleTouch
             //NOTE (Chiv): Signature from :
             // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/Helper/Common.cs
             const string actionManagerSignature = "E8 ?? ?? ?? ?? 33 C0 E9 ?? ?? ?? ?? 8B 7D 0C";
-            //NOTE (Chiv): Signature from :
-            // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/GameStructs/ActionManager.cs
-            const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
+            // NOTE (Chiv): Signature from :
+            // https://github.com/aers/FFXIVClientStructs/blob/c015150c5122f68cbc32aef14ce591b2cdf410ed/FFXIVClientStructs/FFXIV/Client/Game/ActionManager.cs#L36
+            const string getActionCooldownSlotSignature = "40 53 48 83 EC ?? 48 63 DA 85 D2";
 
             #endregion
             
