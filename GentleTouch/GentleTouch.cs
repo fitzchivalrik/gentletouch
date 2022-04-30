@@ -16,6 +16,7 @@ using Dalamud.Game.Internal;
 using Dalamud.Hooking;
 using Dalamud.Logging;
 using Dalamud.Plugin;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using GentleTouch.Collection;
 using GentleTouch.Interop;
 using GentleTouch.Triggers;
@@ -53,16 +54,9 @@ namespace GentleTouch
 
         private delegate int MaybeControllerPoll(nint maybeControllerStruct);
 
-        // NOTE (Chiv) modified from
-        // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/GameStructs/ActionManager.cs
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
-        private delegate ref Cooldown GetActionCooldownSlot(nint actionManager, int cooldownGroup);
-
         private readonly FFXIVSetState _ffxivSetState;
         private readonly XInputWrapperSetState _xInputWrapperSetState;
         private readonly Hook<MaybeControllerPoll> _controllerPoll;
-        private readonly nint _actionManager;
-        private readonly GetActionCooldownSlot _getActionCooldownSlot;
         private readonly DalamudPluginInterface _pluginInterface;
         private readonly ClientState _clientState;
         private readonly ObjectTable _objects;
@@ -148,12 +142,6 @@ namespace GentleTouch
                 "40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9";
             //const string ffxivSetStateSignatureAlternative =
             //    "40 ?? 53 56 48 8B ?? 48 81 EC"; //40 56 57 41 56 48 81 EC ? ? ? ? 44 0F 29 84 24 ? ? ? ?  
-            //NOTE (Chiv): Signature from :
-            // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/Helper/Common.cs
-            const string actionManagerSignature = "E8 ?? ?? ?? ?? 33 C0 E9 ?? ?? ?? ?? 8B 7D 0C";
-            //NOTE (Chiv): Signature from :
-            // https://github.com/Caraxi/SimpleTweaksPlugin/blob/078c48947fce3578d631cd2de50245005aba8fdd/GameStructs/ActionManager.cs
-            const string getActionCooldownSlotSignature = "E8 ?? ?? ?? ?? 0F 57 FF 48 85 C0";
 
             #endregion
             
@@ -187,10 +175,6 @@ namespace GentleTouch
                 sigScanner.ScanText(maybeControllerPollSignature),
                 ControllerPollDetour);
             _controllerPoll.Enable();
-            _actionManager =
-                sigScanner.GetStaticAddressFromSig(actionManagerSignature);
-            _getActionCooldownSlot = Marshal.GetDelegateForFunctionPointer<GetActionCooldownSlot>(
-                sigScanner.ScanText(getActionCooldownSlotSignature));
 
             #endregion
 
@@ -373,16 +357,30 @@ namespace GentleTouch
         private void EnqueueCooldownTriggers()
         {
             
-            var localPlayer = (_objects[0] as PlayerCharacter);
-            var currentJobId = localPlayer?.ClassJob.Id ?? 0;
+            // NOTE: This only happens in combat, so the player must exist
+            var localPlayer  = (_objects[0] as PlayerCharacter)!;
+            var currentJobId = localPlayer.ClassJob.Id;
 
             foreach (var t in _config.CooldownTriggers)
             {
                 if (t.JobId != currentJobId) continue;
-                var c = _getActionCooldownSlot(_actionManager, t.ActionCooldownGroup - 1);
+                var elapsed = 0.0f;
+                var total = 0.0f;
+                unsafe
+                {
+                    var c = ActionManager.Instance()->GetRecastGroupDetail(
+                        t.ActionCooldownGroup - 1);
+                    total = c->Total / ActionManager.GetMaxCharges(t.ActionId, localPlayer.Level);
+                    elapsed = c->Elapsed;
+                }
                 // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
                 // -> We want them to be triggered when leaving the cooldown state!
-                if (c)
+                
+                // NOTE 0.5s seems to work even with ping > 500ms.
+                // Eyeballing reaction time into it, presses should come at most ~0.35s before
+                // end, which works for queuing.
+                
+                if (total - MathF.Min(elapsed, total) > 0.5f)
                 {
                     if (_highestPriorityTrigger == t)
                     {

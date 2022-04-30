@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.5.0
+
+- Update to API 6
+- Reworked charged abilities, those trigger now _only_ on first charge (instead of last as previous).
+
 ## 1.3.0
 
 - feat: Update to API 5 and EW + Now works with DS4 (maybe even DS5?) thanks to the game adding support

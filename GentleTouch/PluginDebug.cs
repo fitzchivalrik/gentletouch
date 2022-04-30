@@ -9,6 +9,7 @@ using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Gui;
 using Dalamud.IoC;
+using FFXIVClientStructs.FFXIV.Client.Game;
 using GentleTouch.Triggers;
 using ImGuiNET;
 
@@ -97,11 +98,17 @@ namespace GentleTouch
                     $"\nPattern Name: {ct.Pattern.Name}");
                 ImGui.Separator();
             }
-            var cooldown = _getActionCooldownSlot(_actionManager, _cooldownGroup - 1);
-            ImGui.Text($"Cooldown Elapsed: {cooldown.CooldownElapsed}");
-            ImGui.Text($"Cooldown Total: {cooldown.CooldownTotal}");
-            ImGui.Text($"IsCooldown: {cooldown.IsActive}");
-            ImGui.Text($"ActionID: {cooldown.ActionID}");
+
+            unsafe
+            {
+                var cooldown = ActionManager.Instance()->GetRecastGroupDetail(
+                    _cooldownGroup - 1);
+                ImGui.Text($"Cooldown Elapsed: {cooldown->Elapsed}");
+                ImGui.Text($"Cooldown Total: {cooldown->Total}");
+                ImGui.Text($"IsCooldown: {cooldown->IsActive}");
+                ImGui.Text($"ActionID: {cooldown->ActionID}");
+            }
+
             ImGui.Separator();
             
             if (_objects[0] is not PlayerCharacter localPlayer)
