@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.6.0
+
+- feat: Update to .NET6
+- chore: Adjustments for D17, automatic plugin builds
+
 ## 1.5.0
 
 - Update to API 6

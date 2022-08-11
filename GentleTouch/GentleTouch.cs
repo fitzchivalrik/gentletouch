@@ -17,7 +17,6 @@ using Dalamud.Hooking;
 using Dalamud.Logging;
 using Dalamud.Plugin;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using GentleTouch.Collection;
 using GentleTouch.Interop;
 using GentleTouch.Triggers;
 using Lumina.Excel.GeneratedSheets;
@@ -43,13 +42,10 @@ namespace GentleTouch
         {
             20,21,22,23,24,25,26,28,29,92,96,98,99,111,112,129,149,150,180,181
         };
-
-        // TODO (Chiv): Check Right and Left Motor for x360/XOne Gamepad
-        [UnmanagedFunctionPointer(CallingConvention.ThisCall)]
+        
         private delegate void FFXIVSetState(nint maybeControllerStruct, int rightMotorSpeedPercent,
             int leftMotorSpeedPercent);
 
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int XInputWrapperSetState(int dwUserIndex, ref XInputVibration pVibration);
 
         private delegate int MaybeControllerPoll(nint maybeControllerStruct);
@@ -171,7 +167,7 @@ namespace GentleTouch
                 sigScanner.ScanText(ffxivSetStateSignature));
             _xInputWrapperSetState = Marshal.GetDelegateForFunctionPointer<XInputWrapperSetState>(
                 sigScanner.ScanText(xInputWrapperSetStateSignature));
-            _controllerPoll = new Hook<MaybeControllerPoll>(
+            _controllerPoll = Hook<MaybeControllerPoll>.FromAddress(
                 sigScanner.ScanText(maybeControllerPollSignature),
                 ControllerPollDetour);
             _controllerPoll.Enable();
