@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.6.1
+
+- chore: Update to API 7
+
 ## 1.6.0
 
 - feat: Update to .NET6
