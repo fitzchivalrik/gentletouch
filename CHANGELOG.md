@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.6.2
+
+- chore: Update to API 8
+
 ## 1.6.1
 
 - chore: Update to API 7

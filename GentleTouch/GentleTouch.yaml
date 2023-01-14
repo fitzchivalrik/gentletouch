@@ -10,4 +10,4 @@ description: |-
 repo_url: https://github.com/fitzchivalrik/gentletouch
 punchline: Create vibration patterns for the controller and specify triggers to make it vibrate.
 changelog: |-
-  - chore: Update to API 7
+  - chore: Update to API 8
