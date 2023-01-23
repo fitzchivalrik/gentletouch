@@ -6,11 +6,12 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using Dalamud.Game.ClientState.Objects;
-using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Logging;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using GameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
+using ObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind;
 
 namespace GentleTouch.Triggers
 {
@@ -64,7 +65,7 @@ namespace GentleTouch.Triggers
 
         private unsafe float DistanceToClosestAetherCurrent()
         {
-            // Methods does not get called if local player is null.
+            // Method does not get called if local player is null.
             var localPlayer = (GameObject*)_objects.GetObjectAddress(0);
             var localPlayerPosition =
                 new Vector3(localPlayer->Position.X, localPlayer->Position.Y, localPlayer->Position.Z);
@@ -74,16 +75,18 @@ namespace GentleTouch.Triggers
                 var address = _objects.GetObjectAddress(i);
                 if (address == IntPtr.Zero)
                     continue;
-                var obj = (GameObject*)address;
+                var obj     = (GameObject*)address;
                 var objKind = (ObjectKind)obj->ObjectKind;
-                if (objKind != ObjectKind.EventObj || ReadByte(address, 0x105) != 0) continue;
-                var objName = GetName(obj);
-                if (!_aetherCurrentNameWhitelist.Contains(objName)) continue;
-                var objectPosition =
-                    new Vector3(obj->Position.X, obj->Position.Y, obj->Position.Z);
-                var d = Vector3.DistanceSquared(localPlayerPosition, objectPosition);
-                if (d < distanceSquared)
-                    distanceSquared = d;
+                if (objKind == ObjectKind.EventObj && obj->GetIsTargetable())
+                {
+                    var objName = GetName(obj);
+                    if (!_aetherCurrentNameWhitelist.Contains(objName)) continue;
+                    var objectPosition =
+                        new Vector3(obj->Position.X, obj->Position.Y, obj->Position.Z);
+                    var d = Vector3.DistanceSquared(localPlayerPosition, objectPosition);
+                    if (d < distanceSquared)
+                        distanceSquared = d;
+                }
             }
             return distanceSquared;
         }

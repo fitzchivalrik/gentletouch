@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.6.3
+
+- fix: Do not vibrate on already attuned Aether Currents
+
 ## 1.6.2
 
 - chore: Update to API 8
