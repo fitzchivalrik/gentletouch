@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using Dalamud.Data;
 using Dalamud.Game;
 using Dalamud.Game.ClientState;
@@ -10,12 +9,10 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.Command;
-using Dalamud.Game.Internal;
 using Dalamud.Hooking;
-using Dalamud.Logging;
 using Dalamud.Plugin;
+using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using GentleTouch.Interop;
 using GentleTouch.Triggers;
@@ -23,49 +20,58 @@ using Lumina.Excel.GeneratedSheets;
 using Condition = Dalamud.Game.ClientState.Conditions.Condition;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
-namespace GentleTouch
+namespace GentleTouch;
+
+public class GentleTouch : IDalamudPlugin
 {
-    public partial class GentleTouch : IDalamudPlugin
+    private const string Command    = "/gentle";
+    public const  string PluginName = "GentleTouch";
+    public        string Name => PluginName;
+
+    private const string WriteFileHidDeviceReportSignature = "E8 ?? ?? ?? ?? 83 7B 18 00 74 55";
+
+    //NOTE (Chiv) RowId of ClassJob sheet
+    private static readonly HashSet<uint> JobsWhitelist = new()
     {
-        private const string Command = "/gentle";
-        public const string PluginName = "GentleTouch";
-        public string Name => PluginName;
+        19, 20, 21, 22, 23, 24, 25, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
+    };
 
-        //NOTE (Chiv) RowId of ClassJob sheet
-        private static readonly HashSet<uint> JobsWhitelist = new()
-        {
-            19,20,21,22,23,24,25,27,28,30,31,32,33,34,35,36,37,38,39,40
-        };
+    //NOTE (Chiv) RowId of ClassJobCategory sheet
+    private static readonly HashSet<uint> JobCategoryWhitelist = new()
+    {
+        20, 21, 22, 23, 24, 25, 26, 28, 29, 92, 96, 98, 99, 111, 112, 129, 149, 150, 180, 181
+    };
 
-        //NOTE (Chiv) RowId of ClassJobCategory sheet
-        private static readonly HashSet<uint> JobCategoryWhitelist = new()
-        {
-            20,21,22,23,24,25,26,28,29,92,96,98,99,111,112,129,149,150,180,181
-        };
-        
-        private delegate void FFXIVSetState(nint maybeControllerStruct, int rightMotorSpeedPercent,
-            int leftMotorSpeedPercent);
+    private delegate void FFXIVSetState(nint maybeControllerStruct, int rightMotorSpeedPercent, int leftMotorSpeedPercent);
 
-        private delegate int XInputWrapperSetState(int dwUserIndex, ref XInputVibration pVibration);
+    private delegate int XInputWrapperSetState(int dwUserIndex, ref XInputVibration pVibration);
 
-        private delegate int MaybeControllerPoll(nint maybeControllerStruct);
+    private delegate int MaybeControllerPoll(nint maybeControllerStruct);
 
-        private readonly FFXIVSetState _ffxivSetState;
-        private readonly XInputWrapperSetState _xInputWrapperSetState;
-        private readonly Hook<MaybeControllerPoll> _controllerPoll;
-        private readonly DalamudPluginInterface _pluginInterface;
-        private readonly ClientState _clientState;
-        private readonly ObjectTable _objects;
-        private readonly Framework _framework;
-        private readonly CommandManager _commands;
-        private readonly Condition _condition;
-        private readonly IReadOnlyCollection<ClassJob> _jobs;
-        private readonly IReadOnlyCollection<FFXIVAction> _allActions;
-        private readonly PriorityQueue<CooldownTrigger, int> _queue = new();
-        private readonly Configuration _config;
-        private readonly AetherCurrentTrigger _aetherCurrentTrigger;
-        private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
-        private VibrationTrigger? _highestPriorityTrigger;
+    private delegate byte WriteFileHidDOutputReport(int hidDevice, nuint outputReport, ushort reportLength);
+
+    [Signature(WriteFileHidDeviceReportSignature)]
+    private readonly WriteFileHidDOutputReport _writeFileHidDOutputReport = null!;
+
+    // [Signature(WriteFileHidDeviceReportSignature, DetourName = nameof(WriteFileHidDOutputReportDetour))]
+    // private Hook<WriteFileHidDOutputReport> _writeFileHidDOutputReportHook { get; init; } = null!;
+
+    private readonly FFXIVSetState                        _ffxivSetState;
+    private readonly XInputWrapperSetState                _xInputWrapperSetState;
+    private readonly Hook<MaybeControllerPoll>            _controllerPoll;
+    private readonly DalamudPluginInterface               _pluginInterface;
+    private readonly ClientState                          _clientState;
+    private readonly ObjectTable                          _objects;
+    private readonly Framework                            _framework;
+    private readonly CommandManager                       _commands;
+    private readonly Condition                            _condition;
+    private readonly IReadOnlyCollection<ClassJob>        _jobs;
+    private readonly IReadOnlyCollection<FFXIVAction>     _allActions;
+    private readonly PriorityQueue<CooldownTrigger, int>  _queue = new();
+    private readonly Configuration                        _config;
+    private readonly AetherCurrentTrigger                 _aetherCurrentTrigger;
+    private          IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
+    private          VibrationTrigger?                    _highestPriorityTrigger;
 
 #if DEBUG
         private int _rightMotorSpeed = 100;
@@ -76,377 +82,380 @@ namespace GentleTouch
         private int _currentIndex;
 #endif
 
-        private nint _maybeControllerStruct;
+    private nint _maybeControllerStruct;
 
-        private bool _shouldDrawConfigUi =
+// @formatter:off
+    private bool _shouldDrawConfigUi =
 #if DEBUG
                 true
 #else
             false
 #endif
-            ;
+    ;
+// @formatter:off
+    
+    private bool _isDisposed;
 
-        private bool _isDisposed;
 
+    /*
+     * DalamudPluginInterface pluginInterface,
+    BuddyList buddies,
+    ChatGui chat,
+    ChatHandlers chatHandlers,
+    ClientState clientState,
+    CommandManager commands,
+    Condition condition,
+    DataManager data,
+    FateTable fates,
+    FlyTextGui flyText,
+    Framework framework,
+    GameGui gameGui,
+    GameNetwork gameNetwork,
+    JobGauges gauges,
+    KeyState keyState,
+    LibcFunction libcFunction,
+    ObjectTable objects,
+    PartyFinderGui pfGui,
+    PartyList party,
+    SeStringManager seStringManager,
+    SigScanner sigScanner,
+    TargetManager targets,
+    ToastGui toasts
+     */
 
-        /*
-         * DalamudPluginInterface pluginInterface,
-        BuddyList buddies,
-        ChatGui chat,
-        ChatHandlers chatHandlers,
-        ClientState clientState,
-        CommandManager commands,
-        Condition condition,
-        DataManager data,
-        FateTable fates,
-        FlyTextGui flyText,
-        Framework framework,
-        GameGui gameGui,
-        GameNetwork gameNetwork,
-        JobGauges gauges,
-        KeyState keyState,
-        LibcFunction libcFunction,
-        ObjectTable objects,
-        PartyFinderGui pfGui,
-        PartyList party,
-        SeStringManager seStringManager,
-        SigScanner sigScanner,
-        TargetManager targets,
-        ToastGui toasts
-         */
-        
-        public GentleTouch(DalamudPluginInterface pi
-            , SigScanner sigScanner
-            , ClientState clientState
-            , DataManager data
-            , ObjectTable objects
-            , CommandManager commands
-            , Framework framework
-            , Condition condition)
+    public GentleTouch(
+        DalamudPluginInterface pi
+      , SigScanner             sigScanner
+      , ClientState            clientState
+      , DataManager            data
+      , ObjectTable            objects
+      , CommandManager         commands
+      , Framework              framework
+      , Condition              condition
+    )
+    {
+        #region Signatures
+
+        // NOTE (Chiv): Different signatures from different methods
+        const string maybeControllerPollSignature =
+            "40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B";
+        //const string maybeControllerPollSignatureAlternative =
+        //    "40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??";
+        const string xInputWrapperSetStateSignature =
+            "E8 ?? ?? ?? ?? 48 81 C4 ?? ?? ?? ?? 5E 5B 5D C3 49 8B 9A";
+        //const string xInputWrapperSetStateSignatureAlternative =
+        //    "48 FF ?? ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89";
+        const string ffxivSetStateSignature =
+            "40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9";
+        //const string ffxivSetStateSignatureAlternative =
+        //    "40 ?? 53 56 48 8B ?? 48 81 EC"; //40 56 57 41 56 48 81 EC ? ? ? ? 44 0F 29 84 24 ? ? ? ?
+
+        #endregion
+
+        var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
+        _pluginInterface = pi;
+        _clientState     = clientState;
+        _commands        = commands;
+        _objects         = objects;
+        _framework       = framework;
+        _condition       = condition;
+        _config          = config;
+        // NOTE (Chiv) Resolve pattern GUIDs to pattern
+        // TODO (Chiv) Better in custom Serializer?
+        foreach (var trigger in _config.CooldownTriggers)
         {
-            #region Signatures
-            // NOTE (Chiv): Different signatures from different methods
-            const string maybeControllerPollSignature =
-                "40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B";
-            //const string maybeControllerPollSignatureAlternative =
-            //    "40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??";
-            const string xInputWrapperSetStateSignature =
-                "E8 ?? ?? ?? ?? 48 81 C4 ?? ?? ?? ?? 5E 5B 5D C3 49 8B 9A";
-            //const string xInputWrapperSetStateSignatureAlternative =
-            //    "48 FF ?? ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89";
-            const string ffxivSetStateSignature =
-                "40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9";
-            //const string ffxivSetStateSignatureAlternative =
-            //    "40 ?? 53 56 48 8B ?? 48 81 EC"; //40 56 57 41 56 48 81 EC ? ? ? ? 44 0F 29 84 24 ? ? ? ?  
-
-            #endregion
-            
-            var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
-            _pluginInterface = pi;
-            _clientState = clientState;
-            _commands = commands;
-            _objects = objects;
-            _framework = framework;
-            _condition = condition;
-            _config = config;
-            // NOTE (Chiv) Resolve pattern GUIDs to pattern
-            // TODO (Chiv) Better in custom Serializer?
-            foreach (var trigger in _config.CooldownTriggers)
-            {
-                trigger.Pattern = _config.Patterns.FirstOrDefault(p => p.Guid == trigger.PatternGuid) ??
-                                  new VibrationPattern();
-            }
-            
-            _clientState.Login += OnLogin;
-            _clientState.Logout += OnLogout;
-
-            #region Hooks, Functions and Addresses
-
-            
-            _ffxivSetState = Marshal.GetDelegateForFunctionPointer<FFXIVSetState>(
-                sigScanner.ScanText(ffxivSetStateSignature));
-            _xInputWrapperSetState = Marshal.GetDelegateForFunctionPointer<XInputWrapperSetState>(
-                sigScanner.ScanText(xInputWrapperSetStateSignature));
-            _controllerPoll = Hook<MaybeControllerPoll>.FromAddress(
-                sigScanner.ScanText(maybeControllerPollSignature),
-                ControllerPollDetour);
-            _controllerPoll.Enable();
-
-            #endregion
-
-            #region Excel Data
-            
-            //TODO Handle potential nulls
-            _jobs = data.Excel.GetSheet<ClassJob>()
-                .Where(j => JobsWhitelist.Contains(j.RowId))
-                .ToArray();
-            var actions = data.Excel.GetSheet<FFXIVAction>()
-                .Where(a => a.IsPlayerAction && a.CooldownGroup != CooldownTrigger.GCDCooldownGroup &&
-                            !a.IsPvP);
-            var gcdActions = data.Excel.GetSheet<FFXIVAction>()
-                .Where(a =>
-                    a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == CooldownTrigger.GCDCooldownGroup
-                    && !a.IsRoleAction && JobCategoryWhitelist.Contains(a.ClassJobCategory.Row))
-                .GroupBy(
-                    a => a.ClassJobCategory.Row,
-                    (_, group) => group.First()
-                );
-            var allActions = actions.Concat(gcdActions);
-            _allActions = allActions as FFXIVAction[] ?? allActions.ToArray();
-            
-            #endregion
-
-            _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
-                () => _config.MaxAetherCurrentSenseDistanceSquared, _objects);
-            _commands.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(); })
-            {
-                HelpMessage = "Open GentleTouch configuration menu.",
-                ShowInHelp = true
-            });
-
-            // NOTE (Chiv) LocalPlayer != null => logged in, but plugin is just loading => do login logic
-            if(_clientState.LocalPlayer is not null)
-            {
-                OnLogin(null!, null!);
-            }
-
+            trigger.Pattern = _config.Patterns.FirstOrDefault(p => p.Guid == trigger.PatternGuid) ??
+                              new VibrationPattern();
         }
 
-        private void OnLogout(object? sender, EventArgs e)
-        {
-            _pluginInterface.UiBuilder.OpenConfigUi -= OnOpenConfigUi;
-            _pluginInterface.UiBuilder.Draw -= DrawUi;
-            _framework.Update -= FrameworkOutOfCombatUpdate;
-            _framework.Update -= FrameworkInCombatUpdate;
-            ControllerSetState(0,0);
-            _currentEnumerator?.Dispose();
-            _currentEnumerator = null;
-            _highestPriorityTrigger = null;
-            _queue.Clear();
-        }
+        _clientState.Login  += OnLogin;
+        _clientState.Logout += OnLogout;
 
-        private void OnLogin(object? sender, EventArgs e)
+        #region Hooks, Functions and Addresses
+
+        _ffxivSetState = Marshal.GetDelegateForFunctionPointer<FFXIVSetState>(
+            sigScanner.ScanText(ffxivSetStateSignature));
+        _xInputWrapperSetState = Marshal.GetDelegateForFunctionPointer<XInputWrapperSetState>(
+            sigScanner.ScanText(xInputWrapperSetStateSignature));
+        _controllerPoll = Hook<MaybeControllerPoll>.FromAddress(
+            sigScanner.ScanText(maybeControllerPollSignature),
+            ControllerPollDetour);
+        _controllerPoll.Enable();
+
+        SignatureHelper.Initialise(this);
+
+        #endregion
+
+        #region Excel Data
+
+        //TODO Handle potential nulls
+        _jobs = data.Excel.GetSheet<ClassJob>()
+                    .Where(j => JobsWhitelist.Contains(j.RowId))
+                    .ToArray();
+        var actions = data.Excel.GetSheet<FFXIVAction>()
+                          .Where(a => a.IsPlayerAction && a.CooldownGroup != CooldownTrigger.GCDCooldownGroup &&
+                                      !a.IsPvP);
+        var gcdActions = data.Excel.GetSheet<FFXIVAction>()
+                             .Where(a =>
+                                  a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == CooldownTrigger.GCDCooldownGroup
+                                  && !a.IsRoleAction && JobCategoryWhitelist.Contains(a.ClassJobCategory.Row))
+                             .GroupBy(
+                                  a => a.ClassJobCategory.Row,
+                                  (_, group) => group.First()
+                              );
+        var allActions = actions.Concat(gcdActions);
+        _allActions = allActions as FFXIVAction[] ?? allActions.ToArray();
+
+        #endregion
+
+        _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
+            () => _config.MaxAetherCurrentSenseDistanceSquared, _objects);
+        _commands.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(); })
         {
-            _pluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
-            _pluginInterface.UiBuilder.Draw += DrawUi;
+            HelpMessage = "Open GentleTouch configuration menu.", ShowInHelp = true
+        });
+
+        // NOTE (Chiv) LocalPlayer != null => logged in, but plugin is just loading => do login logic
+        if (_clientState.LocalPlayer is not null)
+        {
+            OnLogin(null!, null!);
+        }
+    }
+
+    private void OnLogout(object? sender, EventArgs e)
+    {
+        _pluginInterface.UiBuilder.OpenConfigUi -= OnOpenConfigUi;
+        _pluginInterface.UiBuilder.Draw         -= DrawUi;
+        _framework.Update                       -= FrameworkOutOfCombatUpdate;
+        _framework.Update                       -= FrameworkInCombatUpdate;
+        ControllerSetState(0, 0);
+        _currentEnumerator?.Dispose();
+        _currentEnumerator      = null;
+        _highestPriorityTrigger = null;
+        _queue.Clear();
+    }
+
+    private void OnLogin(object? sender, EventArgs e)
+    {
+        _pluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
+        _pluginInterface.UiBuilder.Draw         += DrawUi;
+        _framework.Update                       += FrameworkOutOfCombatUpdate;
+    }
+
+    private void FrameworkInCombatUpdate(Framework framework)
+    {
+        if (!_condition[ConditionFlag.InCombat]
+            || _condition[ConditionFlag.Unconscious]
+            || _condition[ConditionFlag.WatchingCutscene]
+            || _condition[ConditionFlag.WatchingCutscene78]
+            || _condition[ConditionFlag.OccupiedInCutSceneEvent])
+        {
+            ResetQueueAndTriggers();
             _framework.Update += FrameworkOutOfCombatUpdate;
-        }
-        
-        private void FrameworkInCombatUpdate(Framework framework)
-        {
-            if (!_condition[ConditionFlag.InCombat]
-                || _condition[ConditionFlag.Unconscious] 
-                || _condition[ConditionFlag.WatchingCutscene]
-                || _condition[ConditionFlag.WatchingCutscene78]
-                || _condition[ConditionFlag.OccupiedInCutSceneEvent])
-            {
-                ResetQueueAndTriggers();
-                _framework.Update += FrameworkOutOfCombatUpdate;
-                _framework.Update -= FrameworkInCombatUpdate;
-                return;
-            }
-
-            // We are in combat, it will not be Null
-            var localPlayer = (_objects[0] as PlayerCharacter)!;
-            var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                                 !localPlayer!.IsStatus(StatusFlags.WeaponOut);
-            if (weaponSheathed)
-            {
-                ControllerSetState(0, 0);
-                _framework.Update += FrameworkInCombatPauseUpdate;
-                _framework.Update -= FrameworkInCombatUpdate;
-                return;
-            }
-
-            var casting = _config.NoVibrationDuringCasting &&
-                          localPlayer.IsStatus(StatusFlags. IsCasting);
-            if (casting)
-            {
-                ControllerSetState(0, 0);
-                _framework.Update += FrameworkInCombatPauseUpdate;
-                _framework.Update -= FrameworkInCombatUpdate;
-                return;
-            }
-
-            EnqueueCooldownTriggers();
-            UpdateHighestPriorityTrigger();
-            CheckAndVibrate();
+            _framework.Update -= FrameworkInCombatUpdate;
+            return;
         }
 
-        private void FrameworkInCombatPauseUpdate(Framework framework)
+        // We are in combat, it will not be Null
+        var localPlayer = (_objects[0] as PlayerCharacter)!;
+        var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
+                             !localPlayer!.IsStatus(StatusFlags.WeaponOut);
+        if (weaponSheathed)
         {
-            if (!_condition[ConditionFlag.InCombat]
-                || _condition[ConditionFlag.Unconscious] 
-                || _condition[ConditionFlag.WatchingCutscene]
-                || _condition[ConditionFlag.WatchingCutscene78]
-                || _condition[ConditionFlag.OccupiedInCutSceneEvent])
-            {
-                ResetQueueAndTriggers();
-                _framework.Update += FrameworkOutOfCombatUpdate;
-                _framework.Update -= FrameworkInCombatPauseUpdate;
-            }
+            ControllerSetState(0, 0);
+            _framework.Update += FrameworkInCombatPauseUpdate;
+            _framework.Update -= FrameworkInCombatUpdate;
+            return;
+        }
 
-            // We are in combat, it will not be Null
-            var localPlayer = (_objects[0] as PlayerCharacter)!;
-            var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                                 !localPlayer.IsStatus(StatusFlags.WeaponOut);
-            if (weaponSheathed)
-            {
-                return;
-            }
+        var casting = _config.NoVibrationDuringCasting &&
+                      localPlayer.IsStatus(StatusFlags.IsCasting);
+        if (casting)
+        {
+            ControllerSetState(0, 0);
+            _framework.Update += FrameworkInCombatPauseUpdate;
+            _framework.Update -= FrameworkInCombatUpdate;
+            return;
+        }
 
-            var casting = _config.NoVibrationDuringCasting &&
-                          localPlayer.IsStatus(StatusFlags.IsCasting);
-            if (casting)
-            {
-                return;
-            }
-            _framework.Update += FrameworkInCombatUpdate;
+        EnqueueCooldownTriggers();
+        UpdateHighestPriorityTrigger();
+        CheckAndVibrate();
+    }
+
+    private void FrameworkInCombatPauseUpdate(Framework framework)
+    {
+        if (!_condition[ConditionFlag.InCombat]
+            || _condition[ConditionFlag.Unconscious]
+            || _condition[ConditionFlag.WatchingCutscene]
+            || _condition[ConditionFlag.WatchingCutscene78]
+            || _condition[ConditionFlag.OccupiedInCutSceneEvent])
+        {
+            ResetQueueAndTriggers();
+            _framework.Update += FrameworkOutOfCombatUpdate;
             _framework.Update -= FrameworkInCombatPauseUpdate;
         }
 
-        private void ResetQueueAndTriggers()
+        // We are in combat, it will not be Null
+        var localPlayer = (_objects[0] as PlayerCharacter)!;
+        var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
+                             !localPlayer.IsStatus(StatusFlags.WeaponOut);
+        if (weaponSheathed)
         {
-            _queue.Clear();
+            return;
+        }
+
+        var casting = _config.NoVibrationDuringCasting &&
+                      localPlayer.IsStatus(StatusFlags.IsCasting);
+        if (casting)
+        {
+            return;
+        }
+
+        _framework.Update += FrameworkInCombatUpdate;
+        _framework.Update -= FrameworkInCombatPauseUpdate;
+    }
+
+    private void ResetQueueAndTriggers()
+    {
+        _queue.Clear();
+        _highestPriorityTrigger = null;
+        _currentEnumerator?.Dispose();
+        _currentEnumerator = null;
+        foreach (var ct in _config.CooldownTriggers)
+        {
+            ct.ShouldBeTriggered = false;
+        }
+
+        ControllerSetState(0, 0);
+    }
+
+    private void CheckAndVibrate()
+    {
+        if (_currentEnumerator is null) return;
+        if (_currentEnumerator.MoveNext())
+        {
+            var s = _currentEnumerator.Current;
+            if (s is not null)
+            {
+                ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
+            }
+        } else
+        {
+            ControllerSetState(0, 0);
+            _currentEnumerator.Dispose();
+            _currentEnumerator      = null;
             _highestPriorityTrigger = null;
-            _currentEnumerator?.Dispose();
-            _currentEnumerator = null;
-            foreach (var ct in _config.CooldownTriggers)
-            {
-                ct.ShouldBeTriggered = false;
-            }
-
-            ControllerSetState(0, 0);
         }
+    }
 
-        private void CheckAndVibrate()
+    private void UpdateHighestPriorityTrigger()
+    {
+        if (!_queue.TryPeek(out _, out var priority)) return;
+        if ((_highestPriorityTrigger?.Priority ?? int.MaxValue) <= priority) return;
+        if (_highestPriorityTrigger?.Pattern.Infinite ?? false) _highestPriorityTrigger.ShouldBeTriggered = true;
+        _currentEnumerator?.Dispose();
+        _highestPriorityTrigger = _queue.Dequeue();
+        _currentEnumerator      = _highestPriorityTrigger.GetEnumerator();
+        ControllerSetState(0, 0);
+    }
+
+    private void EnqueueCooldownTriggers()
+    {
+        // NOTE: This only happens in combat, so the player must exist
+        var localPlayer  = (_objects[0] as PlayerCharacter)!;
+        var currentJobId = localPlayer.ClassJob.Id;
+
+        foreach (var t in _config.CooldownTriggers)
         {
-            if (_currentEnumerator is null) return;
-            if (_currentEnumerator.MoveNext())
+            if (t.JobId != currentJobId) continue;
+            var elapsed = 0.0f;
+            var total   = 0.0f;
+            unsafe
             {
-                var s = _currentEnumerator.Current;
-                if (s is not null)
-                {
-                    ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
-                }
+                var c = ActionManager.Instance()->GetRecastGroupDetail(
+                    t.ActionCooldownGroup - 1);
+                total   = c->Total / ActionManager.GetMaxCharges(t.ActionId, localPlayer.Level);
+                elapsed = c->Elapsed;
             }
-            else
+            // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
+            // -> We want them to be triggered when leaving the cooldown state!
+
+            // NOTE 0.5s seems to work even with ping > 500ms.
+            // Eyeballing reaction time into it, presses should come at most ~0.35s before
+            // end, which works for queuing.
+
+            if (total - MathF.Min(elapsed, total) > 0.5f)
             {
-                ControllerSetState(0, 0);
-                _currentEnumerator.Dispose();
-                _currentEnumerator = null;
-                _highestPriorityTrigger = null;
+                if (_highestPriorityTrigger == t)
+                {
+                    // NOTE: Memory leak if not disposed, should exist if _highestPriorityTrigger is set
+                    _currentEnumerator!.Dispose();
+                    _currentEnumerator      = null;
+                    _highestPriorityTrigger = null;
+                    ControllerSetState(0, 0);
+                }
+
+                t.ShouldBeTriggered = true;
             }
-        }
-
-        private void UpdateHighestPriorityTrigger()
-        {
-            if (!_queue.TryPeek(out _, out var priority)) return;
-            if ((_highestPriorityTrigger?.Priority ?? int.MaxValue) <= priority) return;
-            if (_highestPriorityTrigger?.Pattern.Infinite ?? false) _highestPriorityTrigger.ShouldBeTriggered = true;
-            _currentEnumerator?.Dispose();
-            _highestPriorityTrigger = _queue.Dequeue();
-            _currentEnumerator = _highestPriorityTrigger.GetEnumerator();
-            ControllerSetState(0, 0);
-        }
-
-        private void EnqueueCooldownTriggers()
-        {
-            
-            // NOTE: This only happens in combat, so the player must exist
-            var localPlayer  = (_objects[0] as PlayerCharacter)!;
-            var currentJobId = localPlayer.ClassJob.Id;
-
-            foreach (var t in _config.CooldownTriggers)
+            // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in 
+            // cooldown state prior), add them to the queue.
+            else if (t.ShouldBeTriggered)
             {
-                if (t.JobId != currentJobId) continue;
-                var elapsed = 0.0f;
-                var total = 0.0f;
-                unsafe
-                {
-                    var c = ActionManager.Instance()->GetRecastGroupDetail(
-                        t.ActionCooldownGroup - 1);
-                    total = c->Total / ActionManager.GetMaxCharges(t.ActionId, localPlayer.Level);
-                    elapsed = c->Elapsed;
-                }
-                // Check for all triggers _in_ cooldown state and set ShouldBeTriggered to true
-                // -> We want them to be triggered when leaving the cooldown state!
-                
-                // NOTE 0.5s seems to work even with ping > 500ms.
-                // Eyeballing reaction time into it, presses should come at most ~0.35s before
-                // end, which works for queuing.
-                
-                if (total - MathF.Min(elapsed, total) > 0.5f)
-                {
-                    if (_highestPriorityTrigger == t)
-                    {
-                        // NOTE: Memory leak if not disposed, should exist if _highestPriorityTrigger is set
-                        _currentEnumerator!.Dispose();
-                        _currentEnumerator = null;
-                        _highestPriorityTrigger = null;
-                        ControllerSetState(0, 0);
-                    }
-
-                    t.ShouldBeTriggered = true;
-                }
-                // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in 
-                // cooldown state prior), add them to the queue.
-                else if (t.ShouldBeTriggered)
-                {
-                    t.ShouldBeTriggered = false;
-                    _queue.Enqueue(t, t.Priority);
-                }
+                t.ShouldBeTriggered = false;
+                _queue.Enqueue(t, t.Priority);
             }
         }
+    }
 
-        private void FrameworkOutOfCombatUpdate(Framework framework)
+    private void FrameworkOutOfCombatUpdate(Framework framework)
+    {
+        if (_condition[ConditionFlag.Unconscious]
+            || _condition[ConditionFlag.WatchingCutscene]
+            || _condition[ConditionFlag.WatchingCutscene78]
+            || _condition[ConditionFlag.OccupiedInCutSceneEvent])
         {
-            if (_condition[ConditionFlag.Unconscious]
-                || _condition[ConditionFlag.WatchingCutscene]
-                || _condition[ConditionFlag.WatchingCutscene78]
-                || _condition[ConditionFlag.OccupiedInCutSceneEvent])
-            {
-                return;
-            }
-            
-            var inCombat = _condition[ConditionFlag.InCombat];
-            if (!inCombat)
-            {
-                switch (_config.SenseAetherCurrents)
-                {
-                    case true when _currentEnumerator is null:
-                        _currentEnumerator = _aetherCurrentTrigger.GetEnumerator();
-                        break;
-                    case false when _currentEnumerator is not null && _currentEnumerator == _aetherCurrentTrigger.GetEnumerator():
-                        _currentEnumerator = null;
-                        ControllerSetState(0,0);
-                        break;
-                }
-                // NOTE (Chiv) Invariant: Combat triggers are cleared
-                CheckAndVibrate();
-                return;
-            }
-
-            if (_objects[0] is not PlayerCharacter localPlayer)
-            {
-                return;
-            }
-            
-            var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
-                                 !localPlayer.IsStatus(StatusFlags.WeaponOut);
-            if (weaponSheathed) return;
-            var casting = _config.NoVibrationDuringCasting &&
-                          localPlayer.IsStatus(StatusFlags.IsCasting);
-            if (casting) return;
-            _currentEnumerator = null;
-            ControllerSetState(0, 0);
-            _framework.Update += FrameworkInCombatUpdate;
-            _framework.Update -= FrameworkOutOfCombatUpdate;
+            return;
         }
 
-        private void ControllerSetState(int leftMotorPercentage, int rightMotorPercentage, bool direct = false,
-            int dwControllerIndex = 0)
+        var inCombat = _condition[ConditionFlag.InCombat];
+        if (!inCombat)
         {
+            switch (_config.SenseAetherCurrents)
+            {
+                case true when _currentEnumerator is null:
+                    _currentEnumerator = _aetherCurrentTrigger.GetEnumerator();
+                    break;
+                case false when _currentEnumerator is not null && _currentEnumerator == _aetherCurrentTrigger.GetEnumerator():
+                    _currentEnumerator = null;
+                    ControllerSetState(0, 0);
+                    break;
+            }
+
+            // NOTE (Chiv) Invariant: Combat triggers are cleared
+            CheckAndVibrate();
+            return;
+        }
+
+        if (_objects[0] is not PlayerCharacter localPlayer)
+        {
+            return;
+        }
+
+        var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
+                             !localPlayer.IsStatus(StatusFlags.WeaponOut);
+        if (weaponSheathed) return;
+        var casting = _config.NoVibrationDuringCasting &&
+                      localPlayer.IsStatus(StatusFlags.IsCasting);
+        if (casting) return;
+        _currentEnumerator = null;
+        ControllerSetState(0, 0);
+        _framework.Update += FrameworkInCombatUpdate;
+        _framework.Update -= FrameworkOutOfCombatUpdate;
+    }
+
+    private void ControllerSetState(int leftMotorPercentage, int rightMotorPercentage, bool direct = false, int dwControllerIndex = 0)
+    {
 #if DEBUG
             PluginLog.Verbose(
                 $"Setting controller state to L: {leftMotorPercentage}, R: {rightMotorPercentage}, direct? {direct}, Index: {dwControllerIndex}");
@@ -459,71 +468,83 @@ namespace GentleTouch
             }
             else
 #endif
+        {
+            unsafe
             {
-                _ffxivSetState(_maybeControllerStruct, rightMotorPercentage, leftMotorPercentage);
+                var isReset = rightMotorPercentage == 0 && leftMotorPercentage == 0;
+                var report = stackalloc DualSenseOutputReportUSB[1];
+                report->Id = DualSenseOutputReportUSB.ID_USB;
+                report->reportCommon.Flag0      = isReset ? (byte)0x00 : DualSenseOutputReportCommon.DS_OUTPUT_VALID_FLAG0_HAPTICS_SELECT;
+                report->reportCommon.Flag1      = 0x00;
+                report->reportCommon.MotorRight = (byte)(0xFF * (rightMotorPercentage / 100f));
+                report->reportCommon.MotorLeft  = (byte)(0xFF * (leftMotorPercentage / 100f));
+                report->reportCommon.Flag2      = isReset ? (byte)0x00 : DualSenseOutputReportCommon.DS_OUTPUT_VALID_FLAG2_COMPATIBLE_VIBRATION2;
+                _writeFileHidDOutputReport(1, (nuint)report, DualSenseOutputReportUSB.SIZE);
             }
+
+            _ffxivSetState(_maybeControllerStruct, rightMotorPercentage, leftMotorPercentage);
         }
+    }
 
-        private int ControllerPollDetour(nint maybeControllerStruct)
-        {
-            _maybeControllerStruct = maybeControllerStruct;
-            _controllerPoll.Disable();
-            return _controllerPoll.Original(maybeControllerStruct);
-        }
+    private int ControllerPollDetour(nint maybeControllerStruct)
+    {
+        _maybeControllerStruct = maybeControllerStruct;
+        _controllerPoll.Disable();
+        return _controllerPoll.Original(maybeControllerStruct);
+    }
 
-        #region UI
+    #region UI
 
-        private void DrawUi()
-        {
-            // TODO (Chiv) Refactor to add/remove UI Event instead of boolean
-            _shouldDrawConfigUi = _shouldDrawConfigUi &&
-                                  ConfigurationUi.DrawConfigUi(_config, _pluginInterface,
-                                      _pluginInterface.SavePluginConfig, _jobs, _allActions, ref _currentEnumerator);
+    private void DrawUi()
+    {
+        // TODO (Chiv) Refactor to add/remove UI Event instead of boolean
+        _shouldDrawConfigUi = _shouldDrawConfigUi &&
+                              ConfigurationUi.DrawConfigUi(_config, _pluginInterface,
+                                  _pluginInterface.SavePluginConfig, _jobs, _allActions, ref _currentEnumerator);
 #if DEBUG
             DrawDebugUi();
 #endif
-        }
-
-        private void OnOpenConfigUi()
-        {
-            _shouldDrawConfigUi = !_shouldDrawConfigUi;
-        }
-
-        #endregion
-
-        #region Dispose
-
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        private void Dispose(bool disposing)
-        {
-            if (_isDisposed) return;
-            if (disposing)
-            {
-                // TODO (Chiv) Still not quite sure about correct dispose
-                // NOTE (Chiv) Explicit, non GC? call - remove managed thingies too.
-                OnLogout(null!, null!);
-                _clientState.Login -= OnLogin;
-                _clientState.Logout -= OnLogout;
-                _commands.RemoveHandler(Command);
-            }
-
-            // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.
-            if (_controllerPoll?.IsEnabled ?? false) _controllerPoll.Disable();
-            _controllerPoll?.Dispose();
-
-            _isDisposed = true;
-        }
-
-        ~GentleTouch()
-        {
-            Dispose(false);
-        }
-
-        #endregion
     }
+
+    private void OnOpenConfigUi()
+    {
+        _shouldDrawConfigUi = !_shouldDrawConfigUi;
+    }
+
+    #endregion
+
+    #region Dispose
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    private void Dispose(bool disposing)
+    {
+        if (_isDisposed) return;
+        if (disposing)
+        {
+            // TODO (Chiv) Still not quite sure about correct dispose
+            // NOTE (Chiv) Explicit, non GC? call - remove managed thingies too.
+            OnLogout(null!, null!);
+            _clientState.Login  -= OnLogin;
+            _clientState.Logout -= OnLogout;
+            _commands.RemoveHandler(Command);
+        }
+
+        // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.
+        if (_controllerPoll?.IsEnabled ?? false) _controllerPoll.Disable();
+        _controllerPoll?.Dispose();
+
+        _isDisposed = true;
+    }
+
+    ~GentleTouch()
+    {
+        Dispose(false);
+    }
+
+    #endregion
 }
