@@ -1,18 +1,22 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace GentleTouch.Interop;
-
+namespace GentleTouch.Interop.DualSense;
+// Primary sources:
 // https://github.com/torvalds/linux/blob/master/drivers/hid/hid-playstation.c#L227
-// Adaptive Trigger:
-// https://github.com/BadMagic100/DualSenseAPI/blob/master/DualSenseAPI/State/DualSenseOutputState.cs
-[StructLayout(LayoutKind.Explicit, Size = SIZE)]
-internal unsafe struct DualSenseOutputReportCommon
-{
-    internal const byte SIZE = 0x2F;
+// &
+// https://github.com/BadMagic100/DualSenseAPI/
+// &
+// https://github.com/nullkal/UniSense/
 
-    internal const byte DS_OUTPUT_VALID_FLAG0_COMPATIBLE_VIBRATION    = 1 << 0;
-    internal const byte DS_OUTPUT_VALID_FLAG0_HAPTICS_SELECT          = 1 << 1;
-    internal const byte DS_OUTPUT_VALID_FLAG0_ADAPTIVE_TRIGGER_SELECT = 1 << 2;
+[StructLayout(LayoutKind.Explicit, Size = Size)]
+internal unsafe struct OutputReportCommon
+{
+    internal const byte Size = 0x2F;
+
+    internal const byte DS_OUTPUT_VALID_FLAG0_COMPATIBLE_VIBRATION       = 1 << 0;
+    internal const byte DS_OUTPUT_VALID_FLAG0_HAPTICS_SELECT             = 1 << 1;
+    internal const byte DS_OUTPUT_VALID_FLAG0_ADAPTIVE_TRIGGER_R2_SELECT = 1 << 2;
+    internal const byte DS_OUTPUT_VALID_FLAG0_ADAPTIVE_TRIGGER_L2_SELECT = 1 << 3;
 
     internal const byte DS_OUTPUT_VALID_FLAG1_MIC_MUTE_LED_CONTROL_ENABLE     = 1 << 0;
     internal const byte DS_OUTPUT_VALID_FLAG1_POWER_SAVE_CONTROL_ENABLE       = 1 << 1;
@@ -37,14 +41,15 @@ internal unsafe struct DualSenseOutputReportCommon
     [FieldOffset(0x09)] public       byte PowerSaveControl;
 
     [FieldOffset(0x0A)] public fixed byte TriggerR2[10];
-    [FieldOffset(0x14)] public fixed byte TriggerL2[10];
-    [FieldOffset(0x1E)] public fixed byte Reserved2[8];
+    [FieldOffset(0x14)] public       byte Unk;
+    [FieldOffset(0x15)] public fixed byte TriggerL2[10];
+    [FieldOffset(0x1E)] public fixed byte Unk2[8];
 
-    [FieldOffset(0x26)] public       byte Flag2; // LightBar?
+    [FieldOffset(0x26)] public       byte Flag2;
     [FieldOffset(0x27)] public fixed byte Reserved3[2];
     [FieldOffset(0x29)] public       byte LightBarSetup;
+    [FieldOffset(0x2A)] public       byte LedBrightness;
 
-    [FieldOffset(0x2A)] public byte PlayerLedBrightness;
     [FieldOffset(0x2B)] public byte PlayerLeds;
 
     [FieldOffset(0x2C)] public byte LightBarColourRed;
@@ -52,17 +57,17 @@ internal unsafe struct DualSenseOutputReportCommon
     [FieldOffset(0x2E)] public byte LightBarColourBlue;
 }
 
-[StructLayout(LayoutKind.Explicit, Size = SIZE)]
-internal struct DualSenseOutputReportUSB
+[StructLayout(LayoutKind.Explicit, Size = Size)]
+internal struct OutputReportUSB
 {
-    internal const byte SIZE = 0x30;
+    internal const byte Size = OutputReportCommon.Size + 0x01;
 
     // USB 0x02, BT ignored, different header and headache
-    // TODO: BT support
-    internal const byte ID_USB = 0x02;
+    // TODO: BT support?
+    internal const byte IdUsb = 0x02;
 
     // Must be ID_USB
     // TODO: How to set automatically, but without overhead of method call and memcopies
-    [FieldOffset(0x00)] internal byte                        Id;
-    [FieldOffset(0x01)] internal DualSenseOutputReportCommon reportCommon;
+    [FieldOffset(0x00)] internal byte               Id;
+    [FieldOffset(0x01)] internal OutputReportCommon reportCommon;
 }

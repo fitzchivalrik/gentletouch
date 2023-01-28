@@ -1,19 +1,4 @@
-﻿using System;
-using System.Numerics;
-using System.Runtime.InteropServices;
-using System.Text;
-using Dalamud.Game.ClientState;
-using Dalamud.Game.ClientState.Conditions;
-using Dalamud.Game.ClientState.Objects;
-using Dalamud.Game.ClientState.Objects.Enums;
-using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Game.Gui;
-using Dalamud.IoC;
-using FFXIVClientStructs.FFXIV.Client.Game;
-using GentleTouch.Triggers;
-using ImGuiNET;
-
-#if DEBUG
+﻿#if DEBUG
 namespace GentleTouch
 {
     public partial class GentleTouch
@@ -134,7 +119,6 @@ namespace GentleTouch
                                 + Math.Pow(localPlayer.Position.Y - gameObject.Position.Y, 2)
                                 + Math.Pow(localPlayer.Position.Z - gameObject.Position.Z, 2));
 
-                //TODO So long as its not fixed in Dalamud
                 var gameObjectName = gameObject.Name.TextValue;
                 ImGui.Text($"{gameObject.ObjectId}:{gameObjectName}" +
                            $" ({gameObject.Position.X},{gameObject.Position.Y},{gameObject.Position.Z})" +

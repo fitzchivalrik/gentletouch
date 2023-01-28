@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.9.0
+
+- feat: DualSense support via DS4 compatibility vibrations
+- feat(DualSense): Set resistance for Adaptive Triggers
+- feat(DS+DS4): Two extra macro buttons:
+  Create (DualSense) / TouchPad (DualShock4) as Individual Macro #96,
+  PS Button as Individual Macro #97
+
 ## 1.6.3
 
 - fix: Do not vibrate on already attuned Aether Currents

@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using Dalamud.Data;
 using Dalamud.Game;
 using Dalamud.Game.ClientState;
@@ -11,17 +10,24 @@ using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Command;
 using Dalamud.Hooking;
+using Dalamud.Logging;
 using Dalamud.Plugin;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using GentleTouch.Interop;
+using GentleTouch.Interop.DualSense;
 using GentleTouch.Triggers;
+using GentleTouch.UI;
 using Lumina.Excel.GeneratedSheets;
+using SharpDX.DirectInput;
 using Condition = Dalamud.Game.ClientState.Conditions.Condition;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 namespace GentleTouch;
 
+// TODO: Holy, does this need a refactor.
 public class GentleTouch : IDalamudPlugin
 {
     private const string Command    = "/gentle";
@@ -42,36 +48,63 @@ public class GentleTouch : IDalamudPlugin
         20, 21, 22, 23, 24, 25, 26, 28, 29, 92, 96, 98, 99, 111, 112, 129, 149, 150, 180, 181
     };
 
-    private delegate void FFXIVSetState(nint maybeControllerStruct, int rightMotorSpeedPercent, int leftMotorSpeedPercent);
-
-    private delegate int XInputWrapperSetState(int dwUserIndex, ref XInputVibration pVibration);
-
-    private delegate int MaybeControllerPoll(nint maybeControllerStruct);
-
-    private delegate byte WriteFileHidDOutputReport(int hidDevice, nuint outputReport, ushort reportLength);
-
     [Signature(WriteFileHidDeviceReportSignature)]
-    private readonly WriteFileHidDOutputReport _writeFileHidDOutputReport = null!;
+    private readonly Delegates.WriteFileHidDOutputReport _writeFileHidDOutputReport = null!;
 
-    // [Signature(WriteFileHidDeviceReportSignature, DetourName = nameof(WriteFileHidDOutputReportDetour))]
-    // private Hook<WriteFileHidDOutputReport> _writeFileHidDOutputReportHook { get; init; } = null!;
+    // Alternative
+    //    "40 ?? 53 56 48 8B ?? 48 81 EC"; //40 56 57 41 56 48 81 EC ? ? ? ? 44 0F 29 84 24 ? ? ? ?
+    [Signature("40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9")]
+    private readonly Delegates.FFXIVSetState _ffxivSetState = null!;
 
-    private readonly FFXIVSetState                        _ffxivSetState;
-    private readonly XInputWrapperSetState                _xInputWrapperSetState;
-    private readonly Hook<MaybeControllerPoll>            _controllerPoll;
-    private readonly DalamudPluginInterface               _pluginInterface;
-    private readonly ClientState                          _clientState;
-    private readonly ObjectTable                          _objects;
-    private readonly Framework                            _framework;
-    private readonly CommandManager                       _commands;
-    private readonly Condition                            _condition;
-    private readonly IReadOnlyCollection<ClassJob>        _jobs;
-    private readonly IReadOnlyCollection<FFXIVAction>     _allActions;
-    private readonly PriorityQueue<CooldownTrigger, int>  _queue = new();
-    private readonly Configuration                        _config;
-    private readonly AetherCurrentTrigger                 _aetherCurrentTrigger;
-    private          IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
-    private          VibrationTrigger?                    _highestPriorityTrigger;
+#if DEBUG
+    [Signature("E8 ?? ?? ?? ?? 48 81 C4 ?? ?? ?? ?? 5E 5B 5D C3 49 8B 9A")]
+    private readonly XInputWrapperSetState _xInputWrapperSetState = null!;
+#endif
+
+    // Alternative
+    // 40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??
+    [Signature("40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B", DetourName = nameof(ControllerPollDetour))]
+    private readonly Hook<Delegates.MaybeControllerPoll> _controllerPoll = null!;
+
+    [Signature(WriteFileHidDeviceReportSignature, DetourName = nameof(WriteFileHidDOutputReportDetour))]
+    private readonly Hook<Delegates.WriteFileHidDOutputReport> _writeFileHidDOutputReportHook = null!;
+
+    [Signature("48 83 EC 38 0F B6 81", DetourName = nameof(DeviceChangeDetour))]
+    private readonly Hook<Delegates.DeviceChangeDelegate> _deviceChangeHook = null!;
+
+    private Hook<Delegates.ParseRawInputReport>? _parseRawInputReportHook;
+
+    private readonly nint _parseRawDualShock4InputReportAddress;
+    private readonly nint _parseRawDualSenseInputReportAddress;
+
+    private readonly DalamudPluginInterface              _pluginInterface;
+    private readonly ClientState                         _clientState;
+    private readonly ObjectTable                         _objects;
+    private readonly Framework                           _framework;
+    private readonly CommandManager                      _commands;
+    private readonly Condition                           _condition;
+    private readonly IReadOnlyCollection<ClassJob>       _jobs;
+    private readonly IReadOnlyCollection<FFXIVAction>    _allActions;
+    private readonly PriorityQueue<CooldownTrigger, int> _queue = new();
+    private readonly Configuration                       _config;
+    private readonly AetherCurrentTrigger                _aetherCurrentTrigger;
+    private readonly Guid                                _dualSenseGuid = Guid.Parse("0ce6054c-0000-0000-0000-504944564944");
+    private readonly DirectInput                         _directInput   = new();
+
+    private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
+    private VibrationTrigger?                    _highestPriorityTrigger;
+
+    // Init in method called from constructor
+    private Action<int, int> _setControllerState = null!;
+
+    private nint _maybeControllerStruct;
+    private bool _shouldDrawConfigUi;
+    private bool _isDisposed;
+    private bool _noGamepadAttached;
+    private bool _isDualSense;
+    private int  _hidDevice = 1;
+    private byte _dualSenseOutputReportFlag0;
+    private byte _dualSenseOutputReportFlag2;
 
 #if DEBUG
         private int _rightMotorSpeed = 100;
@@ -81,47 +114,6 @@ public class GentleTouch : IDalamudPlugin
         private readonly int[] _lastReturnedFromPoll = new int[100];
         private int _currentIndex;
 #endif
-
-    private nint _maybeControllerStruct;
-
-// @formatter:off
-    private bool _shouldDrawConfigUi =
-#if DEBUG
-                true
-#else
-            false
-#endif
-    ;
-// @formatter:off
-    
-    private bool _isDisposed;
-
-
-    /*
-     * DalamudPluginInterface pluginInterface,
-    BuddyList buddies,
-    ChatGui chat,
-    ChatHandlers chatHandlers,
-    ClientState clientState,
-    CommandManager commands,
-    Condition condition,
-    DataManager data,
-    FateTable fates,
-    FlyTextGui flyText,
-    Framework framework,
-    GameGui gameGui,
-    GameNetwork gameNetwork,
-    JobGauges gauges,
-    KeyState keyState,
-    LibcFunction libcFunction,
-    ObjectTable objects,
-    PartyFinderGui pfGui,
-    PartyList party,
-    SeStringManager seStringManager,
-    SigScanner sigScanner,
-    TargetManager targets,
-    ToastGui toasts
-     */
 
     public GentleTouch(
         DalamudPluginInterface pi
@@ -134,24 +126,6 @@ public class GentleTouch : IDalamudPlugin
       , Condition              condition
     )
     {
-        #region Signatures
-
-        // NOTE (Chiv): Different signatures from different methods
-        const string maybeControllerPollSignature =
-            "40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B";
-        //const string maybeControllerPollSignatureAlternative =
-        //    "40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??";
-        const string xInputWrapperSetStateSignature =
-            "E8 ?? ?? ?? ?? 48 81 C4 ?? ?? ?? ?? 5E 5B 5D C3 49 8B 9A";
-        //const string xInputWrapperSetStateSignatureAlternative =
-        //    "48 FF ?? ?? ?? ?? ?? CC CC CC CC CC CC CC CC CC 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89 ?? ?? ?? 48 89";
-        const string ffxivSetStateSignature =
-            "40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9";
-        //const string ffxivSetStateSignatureAlternative =
-        //    "40 ?? 53 56 48 8B ?? 48 81 EC"; //40 56 57 41 56 48 81 EC ? ? ? ? 44 0F 29 84 24 ? ? ? ?
-
-        #endregion
-
         var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
         _pluginInterface = pi;
         _clientState     = clientState;
@@ -173,22 +147,19 @@ public class GentleTouch : IDalamudPlugin
 
         #region Hooks, Functions and Addresses
 
-        _ffxivSetState = Marshal.GetDelegateForFunctionPointer<FFXIVSetState>(
-            sigScanner.ScanText(ffxivSetStateSignature));
-        _xInputWrapperSetState = Marshal.GetDelegateForFunctionPointer<XInputWrapperSetState>(
-            sigScanner.ScanText(xInputWrapperSetStateSignature));
-        _controllerPoll = Hook<MaybeControllerPoll>.FromAddress(
-            sigScanner.ScanText(maybeControllerPollSignature),
-            ControllerPollDetour);
-        _controllerPoll.Enable();
-
         SignatureHelper.Initialise(this);
+
+        _parseRawDualSenseInputReportAddress  = sigScanner.ScanText("E8 ?? ?? ?? ?? 8B 4B 08 48 8D 55 A0");
+        _parseRawDualShock4InputReportAddress = sigScanner.ScanText("E8 ?? ?? ?? ?? EB 2C 0F B7 53 22");
+        _controllerPoll.Enable();
+        _writeFileHidDOutputReportHook.Enable();
+        _deviceChangeHook.Enable();
 
         #endregion
 
         #region Excel Data
 
-        //TODO Handle potential nulls
+        //TODO Handle potential nulls....so far it has not thrown...
         _jobs = data.Excel.GetSheet<ClassJob>()
                     .Where(j => JobsWhitelist.Contains(j.RowId))
                     .ToArray();
@@ -208,18 +179,61 @@ public class GentleTouch : IDalamudPlugin
 
         #endregion
 
+        CheckForGamepads();
         _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
             () => _config.MaxAetherCurrentSenseDistanceSquared, _objects);
-        _commands.AddHandler(Command, new CommandInfo((_, _) => { OnOpenConfigUi(); })
+        _commands.AddHandler(Command, new CommandInfo((cmd, args) =>
+        {
+            if (args == "r")
+            {
+                PluginLog.Debug("Manual refresh of DualSense state.");
+                UpdateDualSenseState();
+            } else
+            {
+                OnOpenConfigUi();
+            }
+        })
         {
             HelpMessage = "Open GentleTouch configuration menu.", ShowInHelp = true
         });
 
+        UpdateDualSenseState();
+
         // NOTE (Chiv) LocalPlayer != null => logged in, but plugin is just loading => do login logic
         if (_clientState.LocalPlayer is not null)
         {
-            OnLogin(null!, null!);
+            OnLogin(null, null!);
         }
+    }
+
+    private void CheckForGamepads()
+    {
+        var devices = _directInput.GetDevices(DeviceClass.GameControl, DeviceEnumerationFlags.AttachedOnly);
+        foreach (var device in devices)
+        {
+            PluginLog.Debug($"Device\n{device.ProductName}:{device.ProductGuid}");
+        }
+
+        _isDualSense = devices.Any(d => d.ProductGuid == _dualSenseGuid);
+        PluginLog.Debug($"Is DualSense? {_isDualSense}");
+        PluginLog.Debug($"No GamePad Attached? {devices.Count == 0}");
+        _noGamepadAttached  = devices.Count == 0;
+        _setControllerState = _isDualSense ? DualSenseSetState : DefaultControllerSetState;
+
+        _parseRawInputReportHook?.Disable();
+        _parseRawInputReportHook?.Dispose();
+        _parseRawInputReportHook = null;
+        unsafe
+        {
+            _parseRawInputReportHook =
+                Hook<Delegates.ParseRawInputReport>
+                   .FromAddress(
+                        _isDualSense ? _parseRawDualSenseInputReportAddress : _parseRawDualShock4InputReportAddress,
+                        _isDualSense ? ParseDualSenseRawInputReportDetour : ParseDualShock4RawInputReportDetour
+                    );
+        }
+
+        _parseRawInputReportHook.Enable();
     }
 
     private void OnLogout(object? sender, EventArgs e)
@@ -228,7 +242,7 @@ public class GentleTouch : IDalamudPlugin
         _pluginInterface.UiBuilder.Draw         -= DrawUi;
         _framework.Update                       -= FrameworkOutOfCombatUpdate;
         _framework.Update                       -= FrameworkInCombatUpdate;
-        ControllerSetState(0, 0);
+        if (!_noGamepadAttached) _setControllerState(0, 0);
         _currentEnumerator?.Dispose();
         _currentEnumerator      = null;
         _highestPriorityTrigger = null;
@@ -248,7 +262,8 @@ public class GentleTouch : IDalamudPlugin
             || _condition[ConditionFlag.Unconscious]
             || _condition[ConditionFlag.WatchingCutscene]
             || _condition[ConditionFlag.WatchingCutscene78]
-            || _condition[ConditionFlag.OccupiedInCutSceneEvent])
+            || _condition[ConditionFlag.OccupiedInCutSceneEvent]
+            || _noGamepadAttached)
         {
             ResetQueueAndTriggers();
             _framework.Update += FrameworkOutOfCombatUpdate;
@@ -262,7 +277,7 @@ public class GentleTouch : IDalamudPlugin
                              !localPlayer!.IsStatus(StatusFlags.WeaponOut);
         if (weaponSheathed)
         {
-            ControllerSetState(0, 0);
+            _setControllerState(0, 0);
             _framework.Update += FrameworkInCombatPauseUpdate;
             _framework.Update -= FrameworkInCombatUpdate;
             return;
@@ -272,7 +287,7 @@ public class GentleTouch : IDalamudPlugin
                       localPlayer.IsStatus(StatusFlags.IsCasting);
         if (casting)
         {
-            ControllerSetState(0, 0);
+            _setControllerState(0, 0);
             _framework.Update += FrameworkInCombatPauseUpdate;
             _framework.Update -= FrameworkInCombatUpdate;
             return;
@@ -289,7 +304,8 @@ public class GentleTouch : IDalamudPlugin
             || _condition[ConditionFlag.Unconscious]
             || _condition[ConditionFlag.WatchingCutscene]
             || _condition[ConditionFlag.WatchingCutscene78]
-            || _condition[ConditionFlag.OccupiedInCutSceneEvent])
+            || _condition[ConditionFlag.OccupiedInCutSceneEvent]
+            || _noGamepadAttached)
         {
             ResetQueueAndTriggers();
             _framework.Update += FrameworkOutOfCombatUpdate;
@@ -327,7 +343,7 @@ public class GentleTouch : IDalamudPlugin
             ct.ShouldBeTriggered = false;
         }
 
-        ControllerSetState(0, 0);
+        _setControllerState(0, 0);
     }
 
     private void CheckAndVibrate()
@@ -338,11 +354,11 @@ public class GentleTouch : IDalamudPlugin
             var s = _currentEnumerator.Current;
             if (s is not null)
             {
-                ControllerSetState(s.LeftMotorPercentage, s.RightMotorPercentage);
+                _setControllerState(s.LeftMotorPercentage, s.RightMotorPercentage);
             }
         } else
         {
-            ControllerSetState(0, 0);
+            _setControllerState(0, 0);
             _currentEnumerator.Dispose();
             _currentEnumerator      = null;
             _highestPriorityTrigger = null;
@@ -357,7 +373,7 @@ public class GentleTouch : IDalamudPlugin
         _currentEnumerator?.Dispose();
         _highestPriorityTrigger = _queue.Dequeue();
         _currentEnumerator      = _highestPriorityTrigger.GetEnumerator();
-        ControllerSetState(0, 0);
+        _setControllerState(0, 0);
     }
 
     private void EnqueueCooldownTriggers()
@@ -393,7 +409,7 @@ public class GentleTouch : IDalamudPlugin
                     _currentEnumerator!.Dispose();
                     _currentEnumerator      = null;
                     _highestPriorityTrigger = null;
-                    ControllerSetState(0, 0);
+                    _setControllerState(0, 0);
                 }
 
                 t.ShouldBeTriggered = true;
@@ -413,7 +429,8 @@ public class GentleTouch : IDalamudPlugin
         if (_condition[ConditionFlag.Unconscious]
             || _condition[ConditionFlag.WatchingCutscene]
             || _condition[ConditionFlag.WatchingCutscene78]
-            || _condition[ConditionFlag.OccupiedInCutSceneEvent])
+            || _condition[ConditionFlag.OccupiedInCutSceneEvent]
+            || _noGamepadAttached)
         {
             return;
         }
@@ -428,7 +445,7 @@ public class GentleTouch : IDalamudPlugin
                     break;
                 case false when _currentEnumerator is not null && _currentEnumerator == _aetherCurrentTrigger.GetEnumerator():
                     _currentEnumerator = null;
-                    ControllerSetState(0, 0);
+                    _setControllerState(0, 0);
                     break;
             }
 
@@ -449,12 +466,30 @@ public class GentleTouch : IDalamudPlugin
                       localPlayer.IsStatus(StatusFlags.IsCasting);
         if (casting) return;
         _currentEnumerator = null;
-        ControllerSetState(0, 0);
+        _setControllerState(0, 0);
         _framework.Update += FrameworkInCombatUpdate;
         _framework.Update -= FrameworkOutOfCombatUpdate;
     }
 
-    private void ControllerSetState(int leftMotorPercentage, int rightMotorPercentage, bool direct = false, int dwControllerIndex = 0)
+    private void DualSenseSetState(int leftMotorPercentage, int rightMotorPercentage)
+    {
+        // Invariant: Dualsense connection already checked
+        unsafe
+        {
+            var isReset = rightMotorPercentage == 0 && leftMotorPercentage == 0;
+            var report  = stackalloc OutputReportUSB[1];
+            report->Id = OutputReportUSB.IdUsb;
+            // TODO: Monitor, if this is correct, or maybe the haptic select must always be on?
+            report->reportCommon.Flag0      = isReset ? (byte)0x00 : _dualSenseOutputReportFlag0;
+            report->reportCommon.Flag1      = 0x00;
+            report->reportCommon.MotorRight = (byte)(0xFF * (rightMotorPercentage / 100f));
+            report->reportCommon.MotorLeft  = (byte)(0xFF * (leftMotorPercentage / 100f));
+            report->reportCommon.Flag2      = isReset ? (byte)0x00 : _dualSenseOutputReportFlag2;
+            _writeFileHidDOutputReport(_hidDevice, (nuint)report, OutputReportUSB.Size);
+        }
+    }
+
+    private void DefaultControllerSetState(int leftMotorPercentage, int rightMotorPercentage)
     {
 #if DEBUG
             PluginLog.Verbose(
@@ -469,21 +504,67 @@ public class GentleTouch : IDalamudPlugin
             else
 #endif
         {
-            unsafe
-            {
-                var isReset = rightMotorPercentage == 0 && leftMotorPercentage == 0;
-                var report = stackalloc DualSenseOutputReportUSB[1];
-                report->Id = DualSenseOutputReportUSB.ID_USB;
-                report->reportCommon.Flag0      = isReset ? (byte)0x00 : DualSenseOutputReportCommon.DS_OUTPUT_VALID_FLAG0_HAPTICS_SELECT;
-                report->reportCommon.Flag1      = 0x00;
-                report->reportCommon.MotorRight = (byte)(0xFF * (rightMotorPercentage / 100f));
-                report->reportCommon.MotorLeft  = (byte)(0xFF * (leftMotorPercentage / 100f));
-                report->reportCommon.Flag2      = isReset ? (byte)0x00 : DualSenseOutputReportCommon.DS_OUTPUT_VALID_FLAG2_COMPATIBLE_VIBRATION2;
-                _writeFileHidDOutputReport(1, (nuint)report, DualSenseOutputReportUSB.SIZE);
-            }
-
             _ffxivSetState(_maybeControllerStruct, rightMotorPercentage, leftMotorPercentage);
         }
+    }
+
+    private void UpdateDualSenseState()
+    {
+        if (!_isDualSense) return;
+        if (_config.LegacyDualSenseVibrations)
+        {
+            _dualSenseOutputReportFlag0 = (byte)(OutputReportFlag0.HapticsSelect | OutputReportFlag0.CompatibleVibration);
+            _dualSenseOutputReportFlag2 = 0x00;
+        } else
+        {
+            _dualSenseOutputReportFlag0 = (byte)OutputReportFlag0.HapticsSelect;
+            _dualSenseOutputReportFlag2 = (byte)OutputReportFlag2.CompatibleVibration2;
+        }
+
+        unsafe
+        {
+            var report = stackalloc OutputReportUSB[1];
+            report->Id = OutputReportUSB.IdUsb;
+            if (_config.TurnLightBarOn)
+            {
+                report->reportCommon.Flag1               = (byte)OutputReportFlag1.LightbarControlEnable;
+                report->reportCommon.LightBarColourRed   = (byte)_config.LightBarColour.X;
+                report->reportCommon.LightBarColourGreen = (byte)_config.LightBarColour.Y;
+                report->reportCommon.LightBarColourBlue  = (byte)_config.LightBarColour.Z;
+            }
+
+            if (_config.SetDualSenseAdaptiveTrigger)
+            {
+#if DEBUG
+                PluginLog.Debug($"TriggerL2 Position {(byte)(_config.TriggerL2StartPosition / 100f * byte.MaxValue)}," +
+                                $" TriggerL2 Force {(byte)(_config.TriggerL2StartForce / 100f * byte.MaxValue)}");
+                PluginLog.Debug($"TriggerR2 Position {(byte)(_config.TriggerR2StartPosition / 100f * byte.MaxValue)}," +
+                                $" TriggerR2 Force {(byte)(_config.TriggerR2StartForce / 100f * byte.MaxValue)}");
+#endif
+                report->reportCommon.Flag0        = (byte)(OutputReportFlag0.AdapterTriggerR2Select | OutputReportFlag0.AdapterTriggerL2Select);
+                report->reportCommon.TriggerL2[0] = (byte)_config.DualSenseAdaptiveTriggerType;
+                report->reportCommon.TriggerL2[1] = (byte)(_config.TriggerL2StartPosition / 100f * byte.MaxValue);
+                report->reportCommon.TriggerL2[2] = (byte)(_config.TriggerL2StartForce / 100f * byte.MaxValue);
+                report->reportCommon.TriggerR2[0] = (byte)_config.DualSenseAdaptiveTriggerType;
+                report->reportCommon.TriggerR2[1] = (byte)(_config.TriggerR2StartPosition / 100f * byte.MaxValue);
+                report->reportCommon.TriggerR2[2] = (byte)(_config.TriggerR2StartForce / 100f * byte.MaxValue);
+            } else
+            {
+                report->reportCommon.Flag0        = (byte)(OutputReportFlag0.AdapterTriggerR2Select | OutputReportFlag0.AdapterTriggerL2Select);
+                report->reportCommon.TriggerL2[0] = (byte)AdaptiveTriggerEffectType.Default;
+                report->reportCommon.TriggerR2[0] = (byte)AdaptiveTriggerEffectType.Default;
+            }
+
+            _writeFileHidDOutputReport(_hidDevice, (nuint)report, OutputReportUSB.Size);
+        }
+    }
+
+    #region Detour
+
+    private nuint DeviceChangeDetour(nuint inputDeviceManager)
+    {
+        CheckForGamepads();
+        return _deviceChangeHook.Original(inputDeviceManager);
     }
 
     private int ControllerPollDetour(nint maybeControllerStruct)
@@ -493,17 +574,86 @@ public class GentleTouch : IDalamudPlugin
         return _controllerPoll.Original(maybeControllerStruct);
     }
 
+    private byte WriteFileHidDOutputReportDetour(int hidDevice, nuint outputReport, ushort reportLength)
+    {
+        _hidDevice = hidDevice;
+        return _writeFileHidDOutputReportHook.Original(hidDevice, outputReport, reportLength);
+    }
+
+    private unsafe nuint ParseDualSenseRawInputReportDetour(nuint unk1, byte* rawReport, nuint unk3, byte unk4, nuint parseStructure)
+    {
+        var report = (InputReport*)rawReport;
+        if ((report->Button1 & (byte)Buttons1.Create) > 0)
+        {
+            var macro    = RaptureMacroModule.Instance->Individual[96];
+            var instance = RaptureShellModule.Instance;
+            if (macro != null && !instance->MacroLocked)
+            {
+                RaptureShellModule.Instance->ExecuteMacro(macro);
+            }
+        }
+
+        if ((report->Button2 & (byte)Buttons2.PsHome) > 0)
+        {
+            var macro    = RaptureMacroModule.Instance->Individual[97];
+            var instance = RaptureShellModule.Instance;
+            if (macro != null && !instance->MacroLocked)
+            {
+                RaptureShellModule.Instance->ExecuteMacro(macro);
+            }
+        }
+
+        //The detour is only called if the hook is set.
+        var result = _parseRawInputReportHook!.Original(unk1, rawReport, unk3, unk4, parseStructure);
+        return result;
+    }
+
+    private unsafe nuint ParseDualShock4RawInputReportDetour(nuint unk1, byte* rawReport, nuint reportLength, byte unk4, nuint parseStructure)
+    {
+        var report = (Interop.DualShock4.InputReport*)rawReport;
+        if ((report->Button2 & (byte)Buttons2.Touchpad) > 0)
+        {
+            var macro    = RaptureMacroModule.Instance->Individual[96];
+            var instance = RaptureShellModule.Instance;
+            if (macro != null && !instance->MacroLocked)
+            {
+                RaptureShellModule.Instance->ExecuteMacro(macro);
+            }
+        }
+
+        if ((report->Button2 & (byte)Buttons2.PsHome) > 0)
+        {
+            var macro    = RaptureMacroModule.Instance->Individual[97];
+            var instance = RaptureShellModule.Instance;
+            if (macro != null && !instance->MacroLocked)
+            {
+                RaptureShellModule.Instance->ExecuteMacro(macro);
+            }
+        }
+
+        //The detour is only called if the hook is set.
+        var result = _parseRawInputReportHook!.Original(unk1, rawReport, reportLength, unk4, parseStructure);
+        return result;
+    }
+
+    #endregion
+
     #region UI
 
     private void DrawUi()
     {
         // TODO (Chiv) Refactor to add/remove UI Event instead of boolean
-        _shouldDrawConfigUi = _shouldDrawConfigUi &&
-                              ConfigurationUi.DrawConfigUi(_config, _pluginInterface,
-                                  _pluginInterface.SavePluginConfig, _jobs, _allActions, ref _currentEnumerator);
 #if DEBUG
             DrawDebugUi();
 #endif
+        if (!_shouldDrawConfigUi) return;
+        (_shouldDrawConfigUi, var changed) = Config.DrawConfigUi(_config, _pluginInterface, _jobs, _allActions, ref _currentEnumerator);
+        if (!changed) return;
+#if DEBUG
+                PluginLog.Verbose("Config changed, saving...");
+#endif
+        _pluginInterface.SavePluginConfig(_config);
+        UpdateDualSenseState();
     }
 
     private void OnOpenConfigUi()
@@ -535,8 +685,14 @@ public class GentleTouch : IDalamudPlugin
         }
 
         // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.
-        if (_controllerPoll?.IsEnabled ?? false) _controllerPoll.Disable();
-        _controllerPoll?.Dispose();
+        if (_controllerPoll.IsEnabled) _controllerPoll.Disable();
+        _controllerPoll.Dispose();
+        if (_writeFileHidDOutputReportHook.IsEnabled) _writeFileHidDOutputReportHook.Disable();
+        _writeFileHidDOutputReportHook.Dispose();
+        if (_deviceChangeHook.IsEnabled) _deviceChangeHook.Disable();
+        _deviceChangeHook.Dispose();
+        if (_parseRawInputReportHook?.IsEnabled ?? false) _parseRawInputReportHook?.Disable();
+        _parseRawInputReportHook?.Dispose();
 
         _isDisposed = true;
     }
