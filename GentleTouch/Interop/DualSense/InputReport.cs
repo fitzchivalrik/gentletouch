@@ -13,8 +13,8 @@ internal struct InputReport
     [FieldOffset(0x05)] internal byte L2;
     [FieldOffset(0x06)] internal byte R2;
     [FieldOffset(0x07)] internal byte SeqNumber;
-    [FieldOffset(0x08)] internal byte Button0;
-    [FieldOffset(0x09)] internal byte Button1;
-    [FieldOffset(0x0A)] internal byte Button2;
-    [FieldOffset(0x0B)] internal byte Button3;
+    [FieldOffset(0x08)] internal byte Buttons0;
+    [FieldOffset(0x09)] internal byte Buttons1;
+    [FieldOffset(0x0A)] internal byte Buttons2;
+    [FieldOffset(0x0B)] internal byte Buttons3;
 }

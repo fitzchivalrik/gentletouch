@@ -16,4 +16,6 @@ public static class Delegates
     internal delegate nuint DeviceChangeDelegate(nuint inputDeviceManager);
 
     internal unsafe delegate nuint ParseRawInputReport(nuint unk1, byte* rawReport, nuint reportLength, byte unk4, nuint parseStructure);
+
+    internal delegate byte DrawWeapon(nuint uiStateWeaponStateUnsheathed, bool isDrawn);
 }

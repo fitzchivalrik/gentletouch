@@ -10,7 +10,7 @@ internal struct InputReport
     [FieldOffset(0x00)] internal byte Id;
 
     // Skip over all the stuff currently not needed
-    [FieldOffset(0x05)] internal byte Button0;
-    [FieldOffset(0x06)] internal byte Button1;
-    [FieldOffset(0x07)] internal byte Button2;
+    [FieldOffset(0x05)] internal byte Buttons0;
+    [FieldOffset(0x06)] internal byte Buttons1;
+    [FieldOffset(0x07)] internal byte Buttons2;
 }

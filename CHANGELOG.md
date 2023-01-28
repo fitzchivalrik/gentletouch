@@ -9,6 +9,7 @@
 - feat(DS+DS4): Two extra macro buttons:
   Create (DualSense) / TouchPad (DualShock4) as Individual Macro #96,
   PS Button as Individual Macro #97
+- feat: Option to /draw & /sheathe with PS button
 
 ## 1.6.3
 

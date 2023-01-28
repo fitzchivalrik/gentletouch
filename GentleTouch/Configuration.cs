@@ -27,6 +27,7 @@ public class Configuration : IPluginConfiguration
     public byte                      TriggerR2StartForce    = 0x00;
     public byte                      TriggerR2StartPosition = 0x00;
     public bool                      TurnLightBarOn;
+    public bool                      PsButtonDrawWeapon;
 
     public int Version { get; set; } = 3;
 }

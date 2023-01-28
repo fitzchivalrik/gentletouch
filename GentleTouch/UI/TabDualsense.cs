@@ -22,8 +22,15 @@ internal partial class Config
         // changed |= ImGui.Checkbox("Turn on light bar.", ref config.TurnLightBarOn);
         // changed |= ImGui.ColorPicker3("LightBar Colour", ref config.LightBarColour, ImGuiColorEditFlags.Uint8);
         // ImGui.Text($"Colour: {config.LightBarColour}");
-        changed |= ImGui.Checkbox("Enable legacy DualSense compatibility vibrations. (Stronger.)",
-            ref config.LegacyDualSenseVibrations);
+        changed |= ImGui.Checkbox("Enable legacy DualSense compatibility vibrations. (Stronger.)", ref config.LegacyDualSenseVibrations);
+        changed |= ImGui.Checkbox("/sheathe & /draw with PS button, instead of Individual Macro #97.", ref config.PsButtonDrawWeapon);
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.BeginTooltip();
+            ImGui.Text("Needs to have '/sheathe' & '/draw' emotes unlocked! (Buy in the Gold Saucer.)");
+            ImGui.EndTooltip();
+        }
+
         changed |= ImGui.Checkbox("Enable continuous trigger resistance.",
             ref config.SetDualSenseAdaptiveTrigger);
         if (config.SetDualSenseAdaptiveTrigger)

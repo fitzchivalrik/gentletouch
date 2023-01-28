@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Dalamud.Data;
 using Dalamud.Game;
 using Dalamud.Game.ClientState;
@@ -14,6 +15,8 @@ using Dalamud.Logging;
 using Dalamud.Plugin;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using GentleTouch.Interop;
@@ -48,6 +51,8 @@ public class GentleTouch : IDalamudPlugin
         20, 21, 22, 23, 24, 25, 26, 28, 29, 92, 96, 98, 99, 111, 112, 129, 149, 150, 180, 181
     };
 
+    #region Hooks & Delegates
+
     [Signature(WriteFileHidDeviceReportSignature)]
     private readonly Delegates.WriteFileHidDOutputReport _writeFileHidDOutputReport = null!;
 
@@ -74,6 +79,36 @@ public class GentleTouch : IDalamudPlugin
 
     private Hook<Delegates.ParseRawInputReport>? _parseRawInputReportHook;
 
+    [Signature("E8 ?? ?? ?? ?? EB ?? 45 84 F6 74 ?? BA")]
+    internal static Delegates.DrawWeapon _drawWeapon = null!;
+
+#if DEBUG
+    //TODO
+    [Signature("E8 ?? ?? ?? ?? EB ?? 45 84 F6 74 ?? BA", DetourName = nameof(DrawWeaponDetour))]
+    private readonly Hook<Delegates.DrawWeapon> _drawWeaponHook = null!;
+
+    // TODO figure out how to correctly read it
+    [Signature("48 8D 0D ?? ?? ?? ?? 80 E2", ScanType = ScanType.StaticAddress)]
+    private nuint Unsheated;
+
+    [Signature("48 8D 0D ?? ?? ?? ?? 80 E2", Offset = 3, ScanType = ScanType.StaticAddress)]
+    private nuint UnsheatedOffSet3;
+
+    [Signature("48 8D 0D ?? ?? ?? ?? 80 E2", Offset = 4, ScanType = ScanType.StaticAddress)]
+    private nuint UnsheatedOffSet4;
+
+    [Signature("48 8D 0D ?? ?? ?? ?? 80 E2", ScanType = ScanType.Text)]
+    private nuint UnsheatedText;
+
+    [Signature("48 8D 0D ?? ?? ?? ?? 80 E2", Offset = 3, ScanType = ScanType.Text)]
+    private nuint UnsheatedOffSet3Text;
+
+    [Signature("48 8D 0D ?? ?? ?? ?? 80 E2", Offset = 4, ScanType = ScanType.Text)]
+    private nuint UnsheatedOffSet4Text;
+#endif
+
+    #endregion
+
     private readonly nint _parseRawDualShock4InputReportAddress;
     private readonly nint _parseRawDualSenseInputReportAddress;
 
@@ -91,6 +126,7 @@ public class GentleTouch : IDalamudPlugin
     private readonly Guid                                _dualSenseGuid = Guid.Parse("0ce6054c-0000-0000-0000-504944564944");
     private readonly DirectInput                         _directInput   = new();
 
+    private RaptureMacroModule.Macro             _drawWeaponMacro;
     private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
     private VibrationTrigger?                    _highestPriorityTrigger;
 
@@ -179,6 +215,7 @@ public class GentleTouch : IDalamudPlugin
 
         #endregion
 
+        SetUpDrawWeaponMacro();
         CheckForGamepads();
         _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
             () => _config.MaxAetherCurrentSenseDistanceSquared, _objects);
@@ -204,6 +241,30 @@ public class GentleTouch : IDalamudPlugin
         {
             OnLogin(null, null!);
         }
+    }
+
+    private unsafe void SetUpDrawWeaponMacro()
+    {
+        var macro = new RaptureMacroModule.Macro();
+        macro.Name.BufUsed             = 1;
+        macro.Name.IsEmpty             = 1;
+        macro.Name.StringLength        = 0;
+        macro.Name.StringPtr           = macro.Name.InlineBuffer;
+        macro.Name.StringPtr[0]        = 0;
+        macro.Name.BufSize             = 0x40;
+        macro.Name.IsUsingInlineBuffer = 1;
+        for (var i = 0; i < 14; i++)
+        {
+            macro.Line[i]->BufUsed             = 1;
+            macro.Line[i]->IsEmpty             = 1;
+            macro.Line[i]->StringLength        = 0;
+            macro.Line[i]->StringPtr           = macro.Line[i]->InlineBuffer;
+            macro.Line[i]->StringPtr[0]        = 0;
+            macro.Line[i]->BufSize             = 0x40;
+            macro.Line[i]->IsUsingInlineBuffer = 1;
+        }
+
+        _drawWeaponMacro = macro;
     }
 
     private void CheckForGamepads()
@@ -254,6 +315,7 @@ public class GentleTouch : IDalamudPlugin
         _pluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
         _pluginInterface.UiBuilder.Draw         += DrawUi;
         _framework.Update                       += FrameworkOutOfCombatUpdate;
+        UpdateDualSenseState();
     }
 
     private void FrameworkInCombatUpdate(Framework framework)
@@ -582,27 +644,10 @@ public class GentleTouch : IDalamudPlugin
 
     private unsafe nuint ParseDualSenseRawInputReportDetour(nuint unk1, byte* rawReport, nuint unk3, byte unk4, nuint parseStructure)
     {
-        var report = (InputReport*)rawReport;
-        if ((report->Button1 & (byte)Buttons1.Create) > 0)
-        {
-            var macro    = RaptureMacroModule.Instance->Individual[96];
-            var instance = RaptureShellModule.Instance;
-            if (macro != null && !instance->MacroLocked)
-            {
-                RaptureShellModule.Instance->ExecuteMacro(macro);
-            }
-        }
-
-        if ((report->Button2 & (byte)Buttons2.PsHome) > 0)
-        {
-            var macro    = RaptureMacroModule.Instance->Individual[97];
-            var instance = RaptureShellModule.Instance;
-            if (macro != null && !instance->MacroLocked)
-            {
-                RaptureShellModule.Instance->ExecuteMacro(macro);
-            }
-        }
-
+        var report   = (InputReport*)rawReport;
+        var buttons1 = report->Buttons1;
+        var buttons2 = report->Buttons2;
+        _framework.RunOnFrameworkThread(() => PsExtraButtons(buttons1, buttons2));
         //The detour is only called if the hook is set.
         var result = _parseRawInputReportHook!.Original(unk1, rawReport, unk3, unk4, parseStructure);
         return result;
@@ -610,8 +655,19 @@ public class GentleTouch : IDalamudPlugin
 
     private unsafe nuint ParseDualShock4RawInputReportDetour(nuint unk1, byte* rawReport, nuint reportLength, byte unk4, nuint parseStructure)
     {
-        var report = (Interop.DualShock4.InputReport*)rawReport;
-        if ((report->Button2 & (byte)Buttons2.Touchpad) > 0)
+        var report   = (Interop.DualShock4.InputReport*)rawReport;
+        var buttons1 = report->Buttons1;
+        var buttons2 = report->Buttons2;
+        _framework.RunOnFrameworkThread(() => PsExtraButtons(buttons1, buttons2));
+
+        //The detour is only called if the hook is set.
+        var result = _parseRawInputReportHook!.Original(unk1, rawReport, reportLength, unk4, parseStructure);
+        return result;
+    }
+
+    private unsafe void PsExtraButtons(byte buttons1, byte buttons2)
+    {
+        if ((buttons1 & (byte)Buttons1.Create) > 0)
         {
             var macro    = RaptureMacroModule.Instance->Individual[96];
             var instance = RaptureShellModule.Instance;
@@ -621,20 +677,60 @@ public class GentleTouch : IDalamudPlugin
             }
         }
 
-        if ((report->Button2 & (byte)Buttons2.PsHome) > 0)
+        if ((buttons2 & (byte)Buttons2.PsHome) > 0)
         {
-            var macro    = RaptureMacroModule.Instance->Individual[97];
             var instance = RaptureShellModule.Instance;
-            if (macro != null && !instance->MacroLocked)
+            if (_config.PsButtonDrawWeapon)
             {
-                RaptureShellModule.Instance->ExecuteMacro(macro);
+                var isWeaponDrawn = &UIState.Instance()->WeaponState.IsUnsheathed;
+                if (!instance->MacroLocked && AgentMap.Instance()->IsPlayerMoving == 0)
+                {
+                    fixed (RaptureMacroModule.Macro* drawWeaponMacro = &_drawWeaponMacro)
+                    {
+                        var bytes = Encoding.UTF8.GetBytes(
+                            *isWeaponDrawn
+                                ? "/sheathe motion\0"
+                                : "/draw motion\0");
+                        fixed (byte* cStr = bytes)
+                        {
+                            // If I understand it correctly, uses InlineBuffer because of small string size.
+                            // Ergo, no need to collect garbage.
+                            drawWeaponMacro->Line[0]->SetString(cStr);
+                        }
+
+                        RaptureShellModule.Instance->ExecuteMacro(drawWeaponMacro);
+                    }
+                } else
+                {
+                    _drawWeapon((nuint)isWeaponDrawn, !(*isWeaponDrawn));
+                }
+            } else
+            {
+                var macro = RaptureMacroModule.Instance->Individual[97];
+                if (macro != null && !instance->MacroLocked)
+                {
+                    RaptureShellModule.Instance->ExecuteMacro(macro);
+                }
             }
         }
+    }
 
-        //The detour is only called if the hook is set.
-        var result = _parseRawInputReportHook!.Original(unk1, rawReport, reportLength, unk4, parseStructure);
+#if DEBUG
+    private unsafe byte DrawWeaponDetour(nuint unsheathed, bool isDrawn)
+    {
+        var result = _drawWeaponHook.Original(unsheathed, isDrawn);
+        PluginLog.Log($"drawWeapon({unsheathed:x8}, {isDrawn}) -> {result}");
+        PluginLog.Log($"{nameof(Unsheated)}:{Unsheated:x8}");
+        PluginLog.Log($"{nameof(UnsheatedOffSet3)}:{UnsheatedOffSet3:x8}");
+        PluginLog.Log($"{nameof(UnsheatedOffSet4)}:{UnsheatedOffSet4:x8}");
+        PluginLog.Log($"{nameof(UnsheatedText)}:{UnsheatedText:x8}");
+        PluginLog.Log($"{nameof(UnsheatedOffSet3Text)}:{UnsheatedOffSet3Text:x8}");
+        PluginLog.Log($"{nameof(UnsheatedOffSet4)}:{UnsheatedOffSet4:x8}");
+        var state = &UIState.Instance()->WeaponState.IsUnsheathed;
+        PluginLog.Log($"WeaponState.Unsheathed:{(nuint)state:x8}");
         return result;
     }
+#endif
 
     #endregion
 
@@ -685,15 +781,13 @@ public class GentleTouch : IDalamudPlugin
         }
 
         // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.
-        if (_controllerPoll.IsEnabled) _controllerPoll.Disable();
         _controllerPoll.Dispose();
-        if (_writeFileHidDOutputReportHook.IsEnabled) _writeFileHidDOutputReportHook.Disable();
         _writeFileHidDOutputReportHook.Dispose();
-        if (_deviceChangeHook.IsEnabled) _deviceChangeHook.Disable();
         _deviceChangeHook.Dispose();
-        if (_parseRawInputReportHook?.IsEnabled ?? false) _parseRawInputReportHook?.Disable();
         _parseRawInputReportHook?.Dispose();
-
+#if DEBUG
+        _drawWeaponHook.Dispose();
+#endif
         _isDisposed = true;
     }
 
