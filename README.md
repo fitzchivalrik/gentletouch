@@ -3,8 +3,6 @@
 A Final Fantasy XIV Quicklauncher (XIVLauncher) plugin.
 Allows one to create vibration patterns for the controller and specify triggers for them.
 
-Note: DS5 is currently unsupported.
-
 Licensed under AGPLv3 or later.
 
 ## Features
