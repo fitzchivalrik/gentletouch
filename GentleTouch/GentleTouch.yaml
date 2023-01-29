@@ -2,8 +2,7 @@
 author: Chivalrik
 description: |-
   You need to configure patterns and triggers before it will work, 
-  open the configuration window to do that. 
-  DS5 is currently unsupported. 
+  open the configuration window to do that.  
   Currently supported triggers are:
   - Cooldowns
   - Near Aether Current
