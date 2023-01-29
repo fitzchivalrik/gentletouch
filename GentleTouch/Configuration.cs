@@ -22,10 +22,10 @@ public class Configuration : IPluginConfiguration
     public AdaptiveTriggerEffectType DualSenseAdaptiveTriggerType;
     public bool                      SetDualSenseAdaptiveTrigger;
     public Vector3                   LightBarColour;
-    public byte                      TriggerL2StartForce    = 0x00;
-    public byte                      TriggerL2StartPosition = 0x00;
-    public byte                      TriggerR2StartForce    = 0x00;
-    public byte                      TriggerR2StartPosition = 0x00;
+    public byte                      TriggerL2ForceOrEndPosition = 0x00;
+    public byte                      TriggerL2StartPosition      = 0x00;
+    public byte                      TriggerR2ForceOrEndPosition = 0x00;
+    public byte                      TriggerR2StartPosition      = 0x00;
     public bool                      TurnLightBarOn;
     public bool                      PsButtonDrawWeapon;
 

@@ -45,7 +45,7 @@ internal static partial class Config
         changed |= DrawGeneralTab(config, scale);
         changed |= DrawPatternTab(config, scale, ref patternEnumerator);
         changed |= DrawTriggerTab(config, pi, scale, jobs, allActions);
-        changed |= DrawDualSenseTab(config, scale);
+        changed |= DrawPlaystationTab(config, scale);
         ImGui.EndTabBar();
         ImGui.End();
         return (shouldDrawConfigUi, changed);

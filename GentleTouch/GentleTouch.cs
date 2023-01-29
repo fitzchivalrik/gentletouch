@@ -112,21 +112,22 @@ public class GentleTouch : IDalamudPlugin
     private readonly nint _parseRawDualShock4InputReportAddress;
     private readonly nint _parseRawDualSenseInputReportAddress;
 
-    private readonly DalamudPluginInterface              _pluginInterface;
-    private readonly ClientState                         _clientState;
-    private readonly ObjectTable                         _objects;
-    private readonly Framework                           _framework;
-    private readonly CommandManager                      _commands;
-    private readonly Condition                           _condition;
-    private readonly IReadOnlyCollection<ClassJob>       _jobs;
-    private readonly IReadOnlyCollection<FFXIVAction>    _allActions;
-    private readonly PriorityQueue<CooldownTrigger, int> _queue = new();
-    private readonly Configuration                       _config;
-    private readonly AetherCurrentTrigger                _aetherCurrentTrigger;
-    private readonly Guid                                _dualSenseGuid = Guid.Parse("0ce6054c-0000-0000-0000-504944564944");
-    private readonly DirectInput                         _directInput   = new();
+    private readonly        DalamudPluginInterface              _pluginInterface;
+    private readonly        ClientState                         _clientState;
+    private readonly        ObjectTable                         _objects;
+    private readonly        Framework                           _framework;
+    private readonly        CommandManager                      _commands;
+    private readonly        Condition                           _condition;
+    private readonly        IReadOnlyCollection<ClassJob>       _jobs;
+    private readonly        IReadOnlyCollection<FFXIVAction>    _allActions;
+    private readonly        PriorityQueue<CooldownTrigger, int> _queue = new();
+    private readonly        Configuration                       _config;
+    private readonly        AetherCurrentTrigger                _aetherCurrentTrigger;
+    private readonly        Guid                                _dualSenseGuid = Guid.Parse("0ce6054c-0000-0000-0000-504944564944");
+    private readonly        DirectInput                         _directInput   = new();
+    private static readonly byte[]                              SheatheBytes   = Encoding.UTF8.GetBytes("/sheathe motion\0");
+    private static readonly byte[]                              DrawBytes      = Encoding.UTF8.GetBytes("/draw motion\0");
 
-    private RaptureMacroModule.Macro             _drawWeaponMacro;
     private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
     private VibrationTrigger?                    _highestPriorityTrigger;
 
@@ -215,7 +216,6 @@ public class GentleTouch : IDalamudPlugin
 
         #endregion
 
-        SetUpDrawWeaponMacro();
         CheckForGamepads();
         _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
             () => _config.MaxAetherCurrentSenseDistanceSquared, _objects);
@@ -241,30 +241,6 @@ public class GentleTouch : IDalamudPlugin
         {
             OnLogin(null, null!);
         }
-    }
-
-    private unsafe void SetUpDrawWeaponMacro()
-    {
-        var macro = new RaptureMacroModule.Macro();
-        macro.Name.BufUsed             = 1;
-        macro.Name.IsEmpty             = 1;
-        macro.Name.StringLength        = 0;
-        macro.Name.StringPtr           = macro.Name.InlineBuffer;
-        macro.Name.StringPtr[0]        = 0;
-        macro.Name.BufSize             = 0x40;
-        macro.Name.IsUsingInlineBuffer = 1;
-        for (var i = 0; i < 14; i++)
-        {
-            macro.Line[i]->BufUsed             = 1;
-            macro.Line[i]->IsEmpty             = 1;
-            macro.Line[i]->StringLength        = 0;
-            macro.Line[i]->StringPtr           = macro.Line[i]->InlineBuffer;
-            macro.Line[i]->StringPtr[0]        = 0;
-            macro.Line[i]->BufSize             = 0x40;
-            macro.Line[i]->IsUsingInlineBuffer = 1;
-        }
-
-        _drawWeaponMacro = macro;
     }
 
     private void CheckForGamepads()
@@ -586,7 +562,8 @@ public class GentleTouch : IDalamudPlugin
         unsafe
         {
             var report = stackalloc OutputReportUSB[1];
-            report->Id = OutputReportUSB.IdUsb;
+            report->Id                 = OutputReportUSB.IdUsb;
+            report->reportCommon.Flag0 = (byte)(OutputReportFlag0.AdapterTriggerR2Select | OutputReportFlag0.AdapterTriggerL2Select);
             if (_config.TurnLightBarOn)
             {
                 report->reportCommon.Flag1               = (byte)OutputReportFlag1.LightbarControlEnable;
@@ -603,16 +580,28 @@ public class GentleTouch : IDalamudPlugin
                 PluginLog.Debug($"TriggerR2 Position {(byte)(_config.TriggerR2StartPosition / 100f * byte.MaxValue)}," +
                                 $" TriggerR2 Force {(byte)(_config.TriggerR2StartForce / 100f * byte.MaxValue)}");
 #endif
-                report->reportCommon.Flag0        = (byte)(OutputReportFlag0.AdapterTriggerR2Select | OutputReportFlag0.AdapterTriggerL2Select);
                 report->reportCommon.TriggerL2[0] = (byte)_config.DualSenseAdaptiveTriggerType;
-                report->reportCommon.TriggerL2[1] = (byte)(_config.TriggerL2StartPosition / 100f * byte.MaxValue);
-                report->reportCommon.TriggerL2[2] = (byte)(_config.TriggerL2StartForce / 100f * byte.MaxValue);
                 report->reportCommon.TriggerR2[0] = (byte)_config.DualSenseAdaptiveTriggerType;
-                report->reportCommon.TriggerR2[1] = (byte)(_config.TriggerR2StartPosition / 100f * byte.MaxValue);
-                report->reportCommon.TriggerR2[2] = (byte)(_config.TriggerR2StartForce / 100f * byte.MaxValue);
+                switch (_config.DualSenseAdaptiveTriggerType)
+                {
+                    case AdaptiveTriggerEffectType.Default:
+                        break;
+                    case AdaptiveTriggerEffectType.ContinuousResistance:
+                    case AdaptiveTriggerEffectType.SectionResistance:
+                        report->reportCommon.TriggerL2[1] = (byte)(_config.TriggerL2StartPosition / 100f * byte.MaxValue);
+                        report->reportCommon.TriggerL2[2] = (byte)(_config.TriggerL2ForceOrEndPosition / 100f * byte.MaxValue);
+                        report->reportCommon.TriggerR2[1] = (byte)(_config.TriggerR2StartPosition / 100f * byte.MaxValue);
+                        report->reportCommon.TriggerR2[2] = (byte)(_config.TriggerR2ForceOrEndPosition / 100f * byte.MaxValue);
+                        break;
+                    case AdaptiveTriggerEffectType.Vibrate:
+                        break;
+                    case AdaptiveTriggerEffectType.Calibrate:
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
+                }
             } else
             {
-                report->reportCommon.Flag0        = (byte)(OutputReportFlag0.AdapterTriggerR2Select | OutputReportFlag0.AdapterTriggerL2Select);
                 report->reportCommon.TriggerL2[0] = (byte)AdaptiveTriggerEffectType.Default;
                 report->reportCommon.TriggerR2[0] = (byte)AdaptiveTriggerEffectType.Default;
             }
@@ -685,21 +674,47 @@ public class GentleTouch : IDalamudPlugin
                 var isWeaponDrawn = &UIState.Instance()->WeaponState.IsUnsheathed;
                 if (!instance->MacroLocked && AgentMap.Instance()->IsPlayerMoving == 0)
                 {
-                    fixed (RaptureMacroModule.Macro* drawWeaponMacro = &_drawWeaponMacro)
+                    var drawWeaponMacro = stackalloc RaptureMacroModule.Macro[1];
+                    drawWeaponMacro->Name.BufUsed             = 1;
+                    drawWeaponMacro->Name.IsEmpty             = 1;
+                    drawWeaponMacro->Name.StringLength        = 0;
+                    drawWeaponMacro->Name.StringPtr           = drawWeaponMacro->Name.InlineBuffer;
+                    drawWeaponMacro->Name.StringPtr[0]        = 0;
+                    drawWeaponMacro->Name.BufSize             = 0x40;
+                    drawWeaponMacro->Name.IsUsingInlineBuffer = 1;
+                    for (var i = 0; i < 14; i++)
                     {
-                        var bytes = Encoding.UTF8.GetBytes(
-                            *isWeaponDrawn
-                                ? "/sheathe motion\0"
-                                : "/draw motion\0");
-                        fixed (byte* cStr = bytes)
-                        {
-                            // If I understand it correctly, uses InlineBuffer because of small string size.
-                            // Ergo, no need to collect garbage.
-                            drawWeaponMacro->Line[0]->SetString(cStr);
-                        }
+                        drawWeaponMacro->Line[i]->BufUsed             = 1;
+                        drawWeaponMacro->Line[i]->IsEmpty             = 1;
+                        drawWeaponMacro->Line[i]->StringLength        = 0;
+                        drawWeaponMacro->Line[i]->StringPtr           = drawWeaponMacro->Line[i]->InlineBuffer;
+                        drawWeaponMacro->Line[i]->StringPtr[0]        = 0;
+                        drawWeaponMacro->Line[i]->BufSize             = 0x40;
+                        drawWeaponMacro->Line[i]->IsUsingInlineBuffer = 1;
+                    }
 
+                    fixed (byte* cStr = *isWeaponDrawn ? SheatheBytes : DrawBytes)
+                    {
+                        drawWeaponMacro->Line[0]->SetString(cStr);
                         RaptureShellModule.Instance->ExecuteMacro(drawWeaponMacro);
                     }
+
+
+                    // fixed (RaptureMacroModule.Macro* drawWeaponMacro = &_drawWeaponMacro)
+                    // {
+                    //     var bytes = Encoding.UTF8.GetBytes(
+                    //         *isWeaponDrawn
+                    //             ? "/sheathe motion\0"
+                    //             : "/draw motion\0");
+                    //     fixed (byte* cStr = bytes)
+                    //     {
+                    //         // If I understand it correctly, uses InlineBuffer because of small string size.
+                    //         // Ergo, no need to collect garbage.
+                    //         drawWeaponMacro->Line[0]->SetString(cStr);
+                    //     }
+                    //
+                    //     RaptureShellModule.Instance->ExecuteMacro(drawWeaponMacro);
+                    // }
                 } else
                 {
                     _drawWeapon((nuint)isWeaponDrawn, !(*isWeaponDrawn));
