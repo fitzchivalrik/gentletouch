@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 1.10.0
+## 1.10.1
 
 - feat: DualSense support via DS4 compatibility vibrations
 - feat(DualSense): Set resistance for Adaptive Triggers
