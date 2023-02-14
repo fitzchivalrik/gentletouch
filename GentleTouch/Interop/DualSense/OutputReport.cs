@@ -13,21 +13,8 @@ internal unsafe struct OutputReportCommon
 {
     internal const byte Size = 0x2F;
 
-    internal const byte DS_OUTPUT_VALID_FLAG0_COMPATIBLE_VIBRATION       = 1 << 0;
-    internal const byte DS_OUTPUT_VALID_FLAG0_HAPTICS_SELECT             = 1 << 1;
-    internal const byte DS_OUTPUT_VALID_FLAG0_ADAPTIVE_TRIGGER_R2_SELECT = 1 << 2;
-    internal const byte DS_OUTPUT_VALID_FLAG0_ADAPTIVE_TRIGGER_L2_SELECT = 1 << 3;
-
-    internal const byte DS_OUTPUT_VALID_FLAG1_MIC_MUTE_LED_CONTROL_ENABLE     = 1 << 0;
-    internal const byte DS_OUTPUT_VALID_FLAG1_POWER_SAVE_CONTROL_ENABLE       = 1 << 1;
-    internal const byte DS_OUTPUT_VALID_FLAG1_LIGHTBAR_CONTROL_ENABLE         = 1 << 2;
-    internal const byte DS_OUTPUT_VALID_FLAG1_RELEASE_LEDS                    = 1 << 3;
-    internal const byte DS_OUTPUT_VALID_FLAG1_PLAYER_INDICATOR_CONTROL_ENABLE = 1 << 4;
-
-    internal const byte DS_OUTPUT_VALID_FLAG2_LIGHTBAR_SETUP_CONTROL_ENABLE = 1 << 1;
-    internal const byte DS_OUTPUT_VALID_FLAG2_COMPATIBLE_VIBRATION2         = 1 << 2;
-    internal const byte DS_OUTPUT_POWER_SAVE_CONTROL_MIC_MUTE               = 1 << 4;
-    internal const byte DS_OUTPUT_LIGHTBAR_SETUP_LIGHT_OUT                  = 1 << 1;
+    internal const byte DS_OUTPUT_POWER_SAVE_CONTROL_MIC_MUTE = 1 << 4;
+    internal const byte DS_OUTPUT_LIGHTBAR_SETUP_LIGHT_OUT    = 1 << 1;
 
     internal const byte FFXIV_FLAG1_DEFAULT = 0x43;
 

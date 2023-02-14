@@ -2,8 +2,8 @@
 
     <PropertyGroup>
         <TargetFramework>net7.0-windows</TargetFramework>
-        <LangVersion>latest</LangVersion>
-        <VersionPrefix>1.10.1</VersionPrefix>
+        <LangVersion>preview</LangVersion>
+        <VersionPrefix>1.10.2</VersionPrefix>
         <Authors>Chivalrik</Authors>
         <Company>Chivalrik</Company>
         <Nullable>enable</Nullable>
@@ -35,7 +35,7 @@
 
     <ItemGroup>
         <PackageReference Include="DalamudPackager" Version="2.1.10"/>
-        <PackageReference Include="SharpDX.DirectInput" Version="4.2.0"/>
+        <PackageReference Include="Hid.Net" Version="4.3.0-beta"/>
     </ItemGroup>
 
     <!-- Dirty -->

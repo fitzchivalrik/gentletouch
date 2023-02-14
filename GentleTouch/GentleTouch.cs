@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Dalamud.Data;
 using Dalamud.Game;
 using Dalamud.Game.ClientState;
@@ -14,6 +16,7 @@ using Dalamud.Hooking;
 using Dalamud.Logging;
 using Dalamud.Plugin;
 using Dalamud.Utility.Signatures;
+using Device.Net;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
@@ -23,8 +26,8 @@ using GentleTouch.Interop;
 using GentleTouch.Interop.DualSense;
 using GentleTouch.Triggers;
 using GentleTouch.UI;
+using Hid.Net.Windows;
 using Lumina.Excel.GeneratedSheets;
-using SharpDX.DirectInput;
 using Condition = Dalamud.Game.ClientState.Conditions.Condition;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
@@ -123,10 +126,8 @@ public class GentleTouch : IDalamudPlugin
     private readonly        PriorityQueue<CooldownTrigger, int> _queue = new();
     private readonly        Configuration                       _config;
     private readonly        AetherCurrentTrigger                _aetherCurrentTrigger;
-    private readonly        Guid                                _dualSenseGuid = Guid.Parse("0ce6054c-0000-0000-0000-504944564944");
-    private readonly        DirectInput                         _directInput   = new();
-    private static readonly byte[]                              SheatheBytes   = Encoding.UTF8.GetBytes("/sheathe motion\0");
-    private static readonly byte[]                              DrawBytes      = Encoding.UTF8.GetBytes("/draw motion\0");
+    private static readonly byte[]                              SheatheBytes = Encoding.UTF8.GetBytes("/sheathe motion\0");
+    private static readonly byte[]                              DrawBytes    = Encoding.UTF8.GetBytes("/draw motion\0");
 
     private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
     private VibrationTrigger?                    _highestPriorityTrigger;
@@ -245,16 +246,34 @@ public class GentleTouch : IDalamudPlugin
 
     private void CheckForGamepads()
     {
-        var devices = _directInput.GetDevices(DeviceClass.GameControl, DeviceEnumerationFlags.AttachedOnly);
-        foreach (var device in devices)
+        //                                                                   Sony         DualSense
+        var connectedDeviceDefinitionsTask = new FilterDeviceDefinition(0x54C, 0xCE6, label: "DualSense")
+                                            .CreateWindowsHidDeviceFactory()
+                                            .GetConnectedDeviceDefinitionsAsync();
+        // Blocking here should be okay, because the enumeration of devices should be done in a heartbeat,
+        // but it needs to be asynchronous because of the nature of the underlying Windows API.
+        connectedDeviceDefinitionsTask.Wait();
+        var connectedDeviceDefinitions = connectedDeviceDefinitionsTask.Result;
+        // We only support one single, via USB connected DualSense
+        if (connectedDeviceDefinitions?.ToArray() is [{ ReadBufferSize: InputReport.SizeUsb }])
         {
-            PluginLog.Debug($"Device\n{device.ProductName}:{device.ProductGuid}");
+            PluginLog.Debug("DualSense connected via USB.");
+            _isDualSense = true;
+        } else
+        {
+            // No DualSense, lets check for gamepad like devices in general
+            const ushort gamePadUsageId = 0x05;
+            connectedDeviceDefinitionsTask = new FilterDeviceDefinition(usagePage: 0x01, label: "Gamepads")
+                                            .CreateWindowsHidDeviceFactory()
+                                            .GetConnectedDeviceDefinitionsAsync();
+
+            connectedDeviceDefinitionsTask.Wait();
+            connectedDeviceDefinitions = connectedDeviceDefinitionsTask.Result;
+            _noGamepadAttached         = connectedDeviceDefinitions != null && connectedDeviceDefinitions.All(x => x.Usage != gamePadUsageId);
         }
 
-        _isDualSense = devices.Any(d => d.ProductGuid == _dualSenseGuid);
         PluginLog.Debug($"Is DualSense? {_isDualSense}");
-        PluginLog.Debug($"No GamePad Attached? {devices.Count == 0}");
-        _noGamepadAttached  = devices.Count == 0;
+        PluginLog.Debug($"No GamePad Attached? {_noGamepadAttached}");
         _setControllerState = _isDualSense ? DualSenseSetState : DefaultControllerSetState;
 
         _parseRawInputReportHook?.Disable();

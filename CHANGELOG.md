@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.10.2
+
+- fix: Do not crash if DualSense is connected via bluetooth
+
 ## 1.10.1
 
 - feat: DualSense support via DS4 compatibility vibrations

@@ -3,17 +3,12 @@ author: Chivalrik
 description: |-
   You need to configure patterns and triggers before it will work, 
   open the configuration window to do that.  
+  
+  For DualSense/Shock4 support, the controller needs to be connected wired (same as the game's)
+  and there can only be one of a type connected (e.g., only one DualSense, not two).
+  
   Currently supported triggers are:
   - Cooldowns
   - Near Aether Current
 repo_url: https://github.com/fitzchivalrik/gentletouch
 punchline: Create vibration patterns for the controller and specify triggers to make it vibrate.
-changelog: |-
-  - feat: DualSense support via DS4 compatibility vibrations
-  - feat(DualSense): Set resistance for Adaptive Triggers
-  - feat(DS+DS4): Two extra macro buttons:
-    Create (DualSense) / TouchPad (DualShock4) as Individual Macro #96,
-    PS Button as Individual Macro #97
-  - feat: Option to /draw & /sheathe with PS button instead of Macro #97
-  
-  Check out the new settings tab, if you are using a DualSense/DualShock4.

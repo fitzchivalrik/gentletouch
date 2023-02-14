@@ -2,10 +2,13 @@
 
 namespace GentleTouch.Interop.DualSense;
 
-[StructLayout(LayoutKind.Explicit, Size = Size)]
+[StructLayout(LayoutKind.Explicit, Size = SizeUsb)]
 internal struct InputReport
 {
-    internal const byte Size = 0x40;
+    internal const byte SizeUsb       = 0x40;
+    internal const byte SizeBluetooth = 0x4E;
+    internal const byte IdUsb         = 0x01;
+    internal const byte IdBluetooth   = 0x31;
 
     [FieldOffset(0x00)] internal byte Id;
 
