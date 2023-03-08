@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.10.3
+
+- fix(DS/4): No more auto repeat when holding Create/PSHome 
+
 ## 1.10.2
 
 - fix: Do not crash if DualSense is connected via bluetooth

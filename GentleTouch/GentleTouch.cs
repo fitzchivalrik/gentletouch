@@ -142,7 +142,12 @@ public class GentleTouch : IDalamudPlugin
     private bool _isDualSense;
     private int  _hidDevice = 1;
     private byte _dualSenseOutputReportFlag0;
+
     private byte _dualSenseOutputReportFlag2;
+
+    // TODO: This is such a bandaid and needs proper state handling, if expanded
+    private bool _createPressedLastReport;
+    private bool _psHomePressedLastReport;
 
 #if DEBUG
         private int _rightMotorSpeed = 100;
@@ -675,7 +680,8 @@ public class GentleTouch : IDalamudPlugin
 
     private unsafe void PsExtraButtons(byte buttons1, byte buttons2)
     {
-        if ((buttons1 & (byte)Buttons1.Create) > 0)
+        var createPressed = (buttons1 & (byte)Buttons1.Create) > 0;
+        if (createPressed && !_createPressedLastReport)
         {
             var macro    = RaptureMacroModule.Instance->Individual[96];
             var instance = RaptureShellModule.Instance;
@@ -685,7 +691,9 @@ public class GentleTouch : IDalamudPlugin
             }
         }
 
-        if ((buttons2 & (byte)Buttons2.PsHome) > 0)
+        _createPressedLastReport = createPressed;
+        var psHomePressed = (buttons2 & (byte)Buttons2.PsHome) > 0;
+        if (psHomePressed && !_psHomePressedLastReport)
         {
             var instance = RaptureShellModule.Instance;
             if (_config.PsButtonDrawWeapon)
@@ -747,6 +755,8 @@ public class GentleTouch : IDalamudPlugin
                 }
             }
         }
+
+        _psHomePressedLastReport = psHomePressed;
     }
 
 #if DEBUG
