@@ -82,12 +82,12 @@ public class GentleTouch : IDalamudPlugin
 
     private Hook<Delegates.ParseRawInputReport>? _parseRawInputReportHook;
 
-    [Signature("E8 ?? ?? ?? ?? EB ?? 45 84 F6 74 ?? BA")]
-    internal static Delegates.DrawWeapon _drawWeapon = null!;
+    [Signature("E8 ?? ?? ?? ?? EB 19 40 84 ED")]
+    private static Delegates.DrawWeapon _drawWeapon = null!;
 
 #if DEBUG
     //TODO
-    [Signature("E8 ?? ?? ?? ?? EB ?? 45 84 F6 74 ?? BA", DetourName = nameof(DrawWeaponDetour))]
+    [Signature("E8 ?? ?? ?? ?? EB 19 40 84 ED", DetourName = nameof(DrawWeaponDetour))]
     private readonly Hook<Delegates.DrawWeapon> _drawWeaponHook = null!;
 
     // TODO figure out how to correctly read it

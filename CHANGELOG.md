@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.10.4
+
+- fix: Update for 6.4
+
 ## 1.10.3
 
 - fix(DS/4): No more auto repeat when holding Create/PSHome 
