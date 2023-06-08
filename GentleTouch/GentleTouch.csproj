@@ -17,7 +17,7 @@
 
     <Target Name="SetSourceRevisionId" BeforeTargets="InitializeSourceControlInformation">
         <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="True" IgnoreExitCode="False">
-            <Output PropertyName="SourceRevisionId" TaskParameter="ConsoleOutput"/>
+            <Output PropertyName="SourceRevisionId" TaskParameter="ConsoleOutput" />
         </Exec>
     </Target>
 
@@ -34,16 +34,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="DalamudPackager" Version="2.1.10"/>
-        <PackageReference Include="Hid.Net" Version="4.3.0-beta"/>
+        <PackageReference Include="DalamudPackager" Version="2.1.10" />
+        <PackageReference Include="Hid.Net" Version="4.3.0-beta" />
     </ItemGroup>
 
     <!-- Dirty -->
     <Target Name="RemoveFilesAfterBuild" AfterTargets="AfterBuild">
         <ItemGroup>
-            <FilesToDelete Include="$(TargetDir)\SharpDX.dll"/>
+            <FilesToDelete Include="$(TargetDir)\SharpDX.dll" />
         </ItemGroup>
-        <Delete Files="@(FilesToDelete)"/>
+        <Delete Files="@(FilesToDelete)" />
     </Target>
 
     <PropertyGroup>

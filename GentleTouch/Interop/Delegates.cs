@@ -9,7 +9,7 @@ public static class Delegates
     private delegate int XInputWrapperSetState(int dwUserIndex, ref XInputVibration pVibration);
 #endif
 
-    internal delegate int MaybeControllerPoll(nint maybeControllerStruct);
+    internal delegate int ControllerPoll(nint gamepadInput);
 
     internal delegate byte WriteFileHidDOutputReport(int hidDevice, nuint outputReport, ushort reportLength);
 

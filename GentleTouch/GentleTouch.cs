@@ -8,6 +8,7 @@ using Dalamud.Data;
 using Dalamud.Game;
 using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.GamePad;
 using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -71,8 +72,9 @@ public class GentleTouch : IDalamudPlugin
 
     // Alternative
     // 40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??
-    [Signature("40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B", DetourName = nameof(ControllerPollDetour))]
-    private readonly Hook<Delegates.MaybeControllerPoll> _controllerPoll = null!;
+    // [Signature("40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B"
+    //   , DetourName = nameof(DualsenseControllerPollDetour))]
+    private readonly Hook<Delegates.ControllerPoll> _controllerPoll = null!;
 
     [Signature(WriteFileHidDeviceReportSignature, DetourName = nameof(WriteFileHidDOutputReportDetour))]
     private readonly Hook<Delegates.WriteFileHidDOutputReport> _writeFileHidDOutputReportHook = null!;
@@ -135,7 +137,7 @@ public class GentleTouch : IDalamudPlugin
     // Init in method called from constructor
     private Action<int, int> _setControllerState = null!;
 
-    private nint _maybeControllerStruct;
+    private nint _controllerStruct;
     private bool _shouldDrawConfigUi;
     private bool _isDisposed;
     private bool _noGamepadAttached;
@@ -148,6 +150,12 @@ public class GentleTouch : IDalamudPlugin
     // TODO: This is such a bandaid and needs proper state handling, if expanded
     private bool _createPressedLastReport;
     private bool _psHomePressedLastReport;
+
+    // TODO: At the end of time, maybe this behemoth will be refactored into separate classes
+    private SimulatedTriggerState _l2SimulatedTriggerState = SimulatedTriggerState.None;
+    private SimulatedTriggerState _r2SimulatedTriggerState = SimulatedTriggerState.None;
+    private TriggerState          _l2TriggerState          = TriggerState.None;
+    private TriggerState          _r2TriggerState          = TriggerState.None;
 
 #if DEBUG
         private int _rightMotorSpeed = 100;
@@ -192,8 +200,15 @@ public class GentleTouch : IDalamudPlugin
 
         SignatureHelper.Initialise(this);
 
+        var controllerPollAddress
+            = sigScanner.ScanText("40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B");
         _parseRawDualSenseInputReportAddress  = sigScanner.ScanText("E8 ?? ?? ?? ?? 8B 4B 08 48 8D 55 A0");
         _parseRawDualShock4InputReportAddress = sigScanner.ScanText("E8 ?? ?? ?? ?? EB 2C 0F B7 53 22");
+
+        CheckForGamepads();
+        _controllerPoll = Hook<Delegates.ControllerPoll>.FromAddress(
+            controllerPollAddress,
+            _isDualSense ? DualsenseControllerPollDetour : ControllerPollDetour);
         _controllerPoll.Enable();
         _writeFileHidDOutputReportHook.Enable();
         _deviceChangeHook.Enable();
@@ -222,7 +237,6 @@ public class GentleTouch : IDalamudPlugin
 
         #endregion
 
-        CheckForGamepads();
         _aetherCurrentTrigger = AetherCurrentTrigger.CreateAetherCurrentTrigger(
             () => _config.MaxAetherCurrentSenseDistanceSquared, _objects);
         _commands.AddHandler(Command, new CommandInfo((cmd, args) =>
@@ -476,7 +490,7 @@ public class GentleTouch : IDalamudPlugin
 
                 t.ShouldBeTriggered = true;
             }
-            // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in 
+            // Check for all triggers _not_ in cooldown state. If they ShouldBeTriggered (meaning, there were in
             // cooldown state prior), add them to the queue.
             else if (t.ShouldBeTriggered)
             {
@@ -566,7 +580,7 @@ public class GentleTouch : IDalamudPlugin
             else
 #endif
         {
-            _ffxivSetState(_maybeControllerStruct, rightMotorPercentage, leftMotorPercentage);
+            _ffxivSetState(_controllerStruct, rightMotorPercentage, leftMotorPercentage);
         }
     }
 
@@ -634,6 +648,75 @@ public class GentleTouch : IDalamudPlugin
         }
     }
 
+    private unsafe void UpdateTriggerState(
+        GamepadInput*                 input
+      , SimulatedTriggerState         state
+      , Action<SimulatedTriggerState> updateState
+      , TriggerState                  triggerState
+      , ushort                        mask
+    )
+    {
+        void MimicDoubleTab()
+        {
+            // PluginLog.Log("??? -> DoubleTapFirstTab");
+            updateState(SimulatedTriggerState.DoubleTapFirstTab);
+            _framework.RunOnTick(() =>
+            {
+                // PluginLog.Log("DoubleTabFirstTab -> DoubleTapNone");
+                updateState(SimulatedTriggerState.DoubleTapNone);
+                _framework.RunOnTick(() =>
+                {
+                    // PluginLog.Log("DoubleTapNone -> DoubleTabHold");
+                    updateState(SimulatedTriggerState.DoubleTabHold);
+                }, TimeSpan.FromMilliseconds(15));
+            }, TimeSpan.FromMilliseconds(15));
+        }
+
+        switch (state)
+        {
+            case SimulatedTriggerState.None when triggerState is TriggerState.None:
+                input->ButtonsRaw = (ushort)(input->ButtonsRaw & ~mask);
+                break;
+            // TODO: This is basically never hit, because we always go from Light -> Full and hit single tap
+            //  Would need to cache and check if full, before emitting light, but meh.
+            case SimulatedTriggerState.None when triggerState is TriggerState.Full:
+                //input->ButtonsRaw = (ushort)(input->ButtonsRaw | mask);
+                PluginLog.Log("None (Full) -> MimickDoubleTab");
+                MimicDoubleTab();
+                break;
+            case SimulatedTriggerState.None when triggerState is TriggerState.Light:
+                // PluginLog.Log("None (Light) -> SingleTap");
+                updateState(SimulatedTriggerState.SingleTap);
+                break;
+            case SimulatedTriggerState.SingleTap when triggerState is TriggerState.None:
+                // PluginLog.Log("SingleTap (None) -> None");
+                updateState(SimulatedTriggerState.None);
+                break;
+            case SimulatedTriggerState.SingleTap when triggerState is TriggerState.Full:
+                updateState(SimulatedTriggerState.DoubleTapNone);
+                // PluginLog.Log("SingleTap (Full) -> DoubleTapNone -> MimickDoubleTab");
+                _framework.RunOnTick(MimicDoubleTab, TimeSpan.FromMilliseconds(25));
+                break;
+            case SimulatedTriggerState.DoubleTapFirstTab:
+                // PluginLog.Log("DoubleTabFirstTab");
+                input->ButtonsRaw = (ushort)(input->ButtonsRaw | mask);
+                break;
+            case SimulatedTriggerState.DoubleTapNone:
+                // PluginLog.Log("DoubleTabNone");
+                input->ButtonsRaw = (ushort)(input->ButtonsRaw & ~mask);
+                break;
+            case SimulatedTriggerState.DoubleTabHold when triggerState is TriggerState.Full or TriggerState.Light:
+                // PluginLog.Log("DoubleTabHold (Full/Light)");
+                break;
+            case SimulatedTriggerState.DoubleTabHold when triggerState is TriggerState.None:
+                // PluginLog.Log("DoubleTabHold (None) -> None");
+                updateState(SimulatedTriggerState.None);
+                break;
+            default:
+                break;
+        }
+    }
+
     #region Detour
 
     private nuint DeviceChangeDetour(nuint inputDeviceManager)
@@ -642,11 +725,33 @@ public class GentleTouch : IDalamudPlugin
         return _deviceChangeHook.Original(inputDeviceManager);
     }
 
-    private int ControllerPollDetour(nint maybeControllerStruct)
+    private int ControllerPollDetour(nint gamepadInput)
     {
-        _maybeControllerStruct = maybeControllerStruct;
+        _controllerStruct = gamepadInput;
         _controllerPoll.Disable();
-        return _controllerPoll.Original(maybeControllerStruct);
+
+        return _controllerPoll.Original(gamepadInput);
+    }
+
+    private int DualsenseControllerPollDetour(nint gamepadInput)
+    {
+        var result = _controllerPoll.Original(gamepadInput);
+        unsafe
+        {
+            var input = (GamepadInput*)gamepadInput;
+            UpdateTriggerState(input,
+                _l2SimulatedTriggerState,
+                state => _l2SimulatedTriggerState = state,
+                _l2TriggerState,
+                (ushort)GamepadButtons.L2);
+            UpdateTriggerState(input,
+                _r2SimulatedTriggerState,
+                state => _r2SimulatedTriggerState = state,
+                _r2TriggerState,
+                (ushort)GamepadButtons.R2);
+        }
+
+        return result;
     }
 
     private byte WriteFileHidDOutputReportDetour(int hidDevice, nuint outputReport, ushort reportLength)
@@ -661,7 +766,20 @@ public class GentleTouch : IDalamudPlugin
         var buttons1 = report->Buttons1;
         var buttons2 = report->Buttons2;
         _framework.RunOnFrameworkThread(() => PsExtraButtons(buttons1, buttons2));
-        //The detour is only called if the hook is set.
+        _l2TriggerState = ((report->Buttons1 & (byte)Buttons1.L2) > 0, report->L2) switch
+        {
+            (true, > 192)          => TriggerState.Full
+          , (true, < 192 and > 42) => TriggerState.Light
+          , _                      => TriggerState.None
+        };
+        _r2TriggerState = ((report->Buttons1 & (byte)Buttons1.R2) > 0, report->R2) switch
+        {
+            (true, > 192)          => TriggerState.Full
+          , (true, < 192 and > 42) => TriggerState.Light
+          , _                      => TriggerState.None
+        };
+
+        //SAFETY: The detour is only called if the hook is set.
         var result = _parseRawInputReportHook!.Original(unk1, rawReport, unk3, unk4, parseStructure);
         return result;
     }
