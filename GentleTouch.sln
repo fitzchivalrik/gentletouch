@@ -12,6 +12,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		adresses_5.4.md = adresses_5.4.md
 		docs/patternWindow.jpg = docs/patternWindow.jpg
 		docs/triggerWindow.jpg = docs/triggerWindow.jpg
+		CHANGELOG.md = CHANGELOG.md
 	EndProjectSection
 EndProject
 Global

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Dalamud.Game.ClientState.Objects;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using ObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind;
 
@@ -17,19 +17,19 @@ internal class AetherCurrentTrigger : VibrationTrigger
     };
 
     // TODO (Chiv) Change to Get/Set and update on config change?
-    private readonly Func<int>   _getMaxAetherCurrentSenseDistanceSquared;
-    private readonly ObjectTable _objects;
+    private readonly Func<int>    _getMaxAetherCurrentSenseDistanceSquared;
+    private readonly IObjectTable _objects;
 
     private IEnumerator<VibrationPattern.Step?>? _enumerator;
 
-    private AetherCurrentTrigger(Func<int> getMaxAetherCurrentSenseDistance, ObjectTable objects, int priority, VibrationPattern pattern)
+    private AetherCurrentTrigger(Func<int> getMaxAetherCurrentSenseDistance, IObjectTable objects, int priority, VibrationPattern pattern)
         : base(priority, pattern) =>
         (_getMaxAetherCurrentSenseDistanceSquared, _objects)
         = (getMaxAetherCurrentSenseDistance, objects);
 
     internal static AetherCurrentTrigger CreateAetherCurrentTrigger(
-        Func<int>   getMaxAetherCurrentSenseDistance
-      , ObjectTable objects
+        Func<int>    getMaxAetherCurrentSenseDistance
+      , IObjectTable objects
     )
     {
         return new AetherCurrentTrigger(
@@ -45,7 +45,7 @@ internal class AetherCurrentTrigger : VibrationTrigger
     }
 
 
-    protected internal override IEnumerator<VibrationPattern.Step?> GetEnumerator()
+    internal protected override IEnumerator<VibrationPattern.Step?> GetEnumerator()
     {
         if (_enumerator is not null) return _enumerator;
         _enumerator = CreateEnumerator();

@@ -1,21 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Dalamud.Data;
 using Dalamud.Game;
-using Dalamud.Game.ClientState;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.GamePad;
-using Dalamud.Game.ClientState.Objects;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Command;
 using Dalamud.Hooking;
-using Dalamud.Logging;
 using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
 using Device.Net;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -23,23 +17,23 @@ using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Client.UI.Shell;
+using FFXIVClientStructs.Interop;
 using GentleTouch.Interop;
 using GentleTouch.Interop.DualSense;
 using GentleTouch.Triggers;
 using GentleTouch.UI;
 using Hid.Net.Windows;
 using Lumina.Excel.GeneratedSheets;
-using Condition = Dalamud.Game.ClientState.Conditions.Condition;
 using FFXIVAction = Lumina.Excel.GeneratedSheets.Action;
 
 namespace GentleTouch;
 
 // TODO: Holy, does this need a refactor.
-public class GentleTouch : IDalamudPlugin
+public partial class GentleTouch : IDalamudPlugin
 {
-    private const string Command    = "/gentle";
-    public const  string PluginName = "GentleTouch";
-    public        string Name => PluginName;
+    public const  string     PluginName = "GentleTouch";
+    private const string     Command    = "/gentle";
+    public static IPluginLog PluginLog { get; private set; } = null!;
 
     private const string WriteFileHidDeviceReportSignature = "E8 ?? ?? ?? ?? 83 7B 18 00 74 55";
 
@@ -65,10 +59,10 @@ public class GentleTouch : IDalamudPlugin
     [Signature("40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9")]
     private readonly Delegates.FFXIVSetState _ffxivSetState = null!;
 
-#if DEBUG
-    [Signature("E8 ?? ?? ?? ?? 48 81 C4 ?? ?? ?? ?? 5E 5B 5D C3 49 8B 9A")]
-    private readonly XInputWrapperSetState _xInputWrapperSetState = null!;
-#endif
+// #if DEBUG
+//     [Signature("E8 ?? ?? ?? ?? 48 81 C4 ?? ?? ?? ?? 5E 5B 5D C3 49 8B 9A")]
+//     private readonly XInputWrapperSetState _xInputWrapperSetState = null!;
+// #endif
 
     // Alternative
     // 40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??
@@ -118,18 +112,19 @@ public class GentleTouch : IDalamudPlugin
     private readonly nint _parseRawDualSenseInputReportAddress;
 
     private readonly        DalamudPluginInterface              _pluginInterface;
-    private readonly        ClientState                         _clientState;
-    private readonly        ObjectTable                         _objects;
-    private readonly        Framework                           _framework;
-    private readonly        CommandManager                      _commands;
-    private readonly        Condition                           _condition;
+    private readonly        IClientState                        _clientState;
+    private readonly        IObjectTable                        _objects;
+    private readonly        IFramework                          _framework;
+    private readonly        ICommandManager                     _commands;
+    private readonly        ICondition                          _condition;
+    private readonly        IGameInteropProvider                _gameInteropProvider;
     private readonly        IReadOnlyCollection<ClassJob>       _jobs;
     private readonly        IReadOnlyCollection<FFXIVAction>    _allActions;
     private readonly        PriorityQueue<CooldownTrigger, int> _queue = new();
     private readonly        Configuration                       _config;
     private readonly        AetherCurrentTrigger                _aetherCurrentTrigger;
-    private static readonly byte[]                              SheatheBytes = Encoding.UTF8.GetBytes("/sheathe motion\0");
-    private static readonly byte[]                              DrawBytes    = Encoding.UTF8.GetBytes("/draw motion\0");
+    private static readonly byte[]                              SheatheBytes = "/sheathe motion\0"u8.ToArray();
+    private static readonly byte[]                              DrawBytes    = "/draw motion\0"u8.ToArray();
 
     private IEnumerator<VibrationPattern.Step?>? _currentEnumerator;
     private VibrationTrigger?                    _highestPriorityTrigger;
@@ -168,23 +163,27 @@ public class GentleTouch : IDalamudPlugin
 
     public GentleTouch(
         DalamudPluginInterface pi
-      , SigScanner             sigScanner
-      , ClientState            clientState
-      , DataManager            data
-      , ObjectTable            objects
-      , CommandManager         commands
-      , Framework              framework
-      , Condition              condition
+      , ISigScanner            sigScanner
+      , IClientState           clientState
+      , IDataManager           data
+      , IObjectTable           objects
+      , ICommandManager        commands
+      , IFramework             framework
+      , ICondition             condition
+      , IPluginLog             pluginLog
+      , IGameInteropProvider   gameInteropProvider
     )
     {
+        PluginLog = pluginLog;
         var config = pi.GetPluginConfig() as Configuration ?? new Configuration();
-        _pluginInterface = pi;
-        _clientState     = clientState;
-        _commands        = commands;
-        _objects         = objects;
-        _framework       = framework;
-        _condition       = condition;
-        _config          = config;
+        _pluginInterface     = pi;
+        _clientState         = clientState;
+        _commands            = commands;
+        _objects             = objects;
+        _framework           = framework;
+        _condition           = condition;
+        _config              = config;
+        _gameInteropProvider = gameInteropProvider;
         // NOTE (Chiv) Resolve pattern GUIDs to pattern
         // TODO (Chiv) Better in custom Serializer?
         foreach (var trigger in _config.CooldownTriggers)
@@ -198,7 +197,7 @@ public class GentleTouch : IDalamudPlugin
 
         #region Hooks, Functions and Addresses
 
-        SignatureHelper.Initialise(this);
+        gameInteropProvider.InitializeFromAttributes(this);
 
         var controllerPollAddress
             = sigScanner.ScanText("40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B");
@@ -206,7 +205,7 @@ public class GentleTouch : IDalamudPlugin
         _parseRawDualShock4InputReportAddress = sigScanner.ScanText("E8 ?? ?? ?? ?? EB 2C 0F B7 53 22");
 
         CheckForGamepads();
-        _controllerPoll = Hook<Delegates.ControllerPoll>.FromAddress(
+        _controllerPoll = gameInteropProvider.HookFromAddress<Delegates.ControllerPoll>(
             controllerPollAddress,
             _isDualSense ? DualsenseControllerPollDetour : ControllerPollDetour);
         _controllerPoll.Enable();
@@ -217,17 +216,17 @@ public class GentleTouch : IDalamudPlugin
 
         #region Excel Data
 
-        //TODO Handle potential nulls....so far it has not thrown...
-        _jobs = data.Excel.GetSheet<ClassJob>()
+        //SAFETY: If this returns null, something bigger broke
+        _jobs = data.Excel.GetSheet<ClassJob>()!
                     .Where(j => JobsWhitelist.Contains(j.RowId))
                     .ToArray();
-        var actions = data.Excel.GetSheet<FFXIVAction>()
+        var actions = data.Excel.GetSheet<FFXIVAction>()!
                           .Where(a => a.IsPlayerAction && a.CooldownGroup != CooldownTrigger.GCDCooldownGroup &&
                                       !a.IsPvP);
-        var gcdActions = data.Excel.GetSheet<FFXIVAction>()
+        var gcdActions = data.Excel.GetSheet<FFXIVAction>()!
                              .Where(a =>
-                                  a.IsPlayerAction && !a.IsPvP && a.CooldownGroup == CooldownTrigger.GCDCooldownGroup
-                                  && !a.IsRoleAction && JobCategoryWhitelist.Contains(a.ClassJobCategory.Row))
+                                  a is { IsPlayerAction: true, IsPvP: false, CooldownGroup: CooldownTrigger.GCDCooldownGroup, IsRoleAction: false }
+                                  && JobCategoryWhitelist.Contains(a.ClassJobCategory.Row))
                              .GroupBy(
                                   a => a.ClassJobCategory.Row,
                                   (_, group) => group.First()
@@ -259,7 +258,7 @@ public class GentleTouch : IDalamudPlugin
         // NOTE (Chiv) LocalPlayer != null => logged in, but plugin is just loading => do login logic
         if (_clientState.LocalPlayer is not null)
         {
-            OnLogin(null, null!);
+            OnLogin();
         }
     }
 
@@ -301,8 +300,8 @@ public class GentleTouch : IDalamudPlugin
         unsafe
         {
             _parseRawInputReportHook =
-                Hook<Delegates.ParseRawInputReport>
-                   .FromAddress(
+                _gameInteropProvider
+                   .HookFromAddress<Delegates.ParseRawInputReport>(
                         _isDualSense ? _parseRawDualSenseInputReportAddress : _parseRawDualShock4InputReportAddress,
                         _isDualSense ? ParseDualSenseRawInputReportDetour : ParseDualShock4RawInputReportDetour
                     );
@@ -311,7 +310,7 @@ public class GentleTouch : IDalamudPlugin
         _parseRawInputReportHook.Enable();
     }
 
-    private void OnLogout(object? sender, EventArgs e)
+    private void OnLogout()
     {
         _pluginInterface.UiBuilder.OpenConfigUi -= OnOpenConfigUi;
         _pluginInterface.UiBuilder.Draw         -= DrawUi;
@@ -324,7 +323,7 @@ public class GentleTouch : IDalamudPlugin
         _queue.Clear();
     }
 
-    private void OnLogin(object? sender, EventArgs e)
+    private void OnLogin()
     {
         _pluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
         _pluginInterface.UiBuilder.Draw         += DrawUi;
@@ -332,7 +331,7 @@ public class GentleTouch : IDalamudPlugin
         UpdateDualSenseState();
     }
 
-    private void FrameworkInCombatUpdate(Framework framework)
+    private void FrameworkInCombatUpdate(IFramework framework)
     {
         if (!_condition[ConditionFlag.InCombat]
             || _condition[ConditionFlag.Unconscious]
@@ -374,7 +373,7 @@ public class GentleTouch : IDalamudPlugin
         CheckAndVibrate();
     }
 
-    private void FrameworkInCombatPauseUpdate(Framework framework)
+    private void FrameworkInCombatPauseUpdate(IFramework framework)
     {
         if (!_condition[ConditionFlag.InCombat]
             || _condition[ConditionFlag.Unconscious]
@@ -500,7 +499,7 @@ public class GentleTouch : IDalamudPlugin
         }
     }
 
-    private void FrameworkOutOfCombatUpdate(Framework framework)
+    private void FrameworkOutOfCombatUpdate(IFramework framework)
     {
         if (_condition[ConditionFlag.Unconscious]
             || _condition[ConditionFlag.WatchingCutscene]
@@ -801,11 +800,11 @@ public class GentleTouch : IDalamudPlugin
         var createPressed = (buttons1 & (byte)Buttons1.Create) > 0;
         if (createPressed && !_createPressedLastReport)
         {
-            var macro    = RaptureMacroModule.Instance->Individual[96];
-            var instance = RaptureShellModule.Instance;
+            var macro    = RaptureMacroModule.Instance()->GetMacro(0, 96);
+            var instance = RaptureShellModule.Instance();
             if (macro != null && !instance->MacroLocked)
             {
-                RaptureShellModule.Instance->ExecuteMacro(macro);
+                instance->ExecuteMacro(macro);
             }
         }
 
@@ -813,11 +812,11 @@ public class GentleTouch : IDalamudPlugin
         var psHomePressed = (buttons2 & (byte)Buttons2.PsHome) > 0;
         if (psHomePressed && !_psHomePressedLastReport)
         {
-            var instance = RaptureShellModule.Instance;
+            var raptureShellModule = RaptureShellModule.Instance();
             if (_config.PsButtonDrawWeapon)
             {
                 var isWeaponDrawn = &UIState.Instance()->WeaponState.IsUnsheathed;
-                if (!instance->MacroLocked && AgentMap.Instance()->IsPlayerMoving == 0)
+                if (!raptureShellModule->MacroLocked && AgentMap.Instance()->IsPlayerMoving == 0)
                 {
                     var drawWeaponMacro = stackalloc RaptureMacroModule.Macro[1];
                     drawWeaponMacro->Name.BufUsed             = 1;
@@ -827,21 +826,22 @@ public class GentleTouch : IDalamudPlugin
                     drawWeaponMacro->Name.StringPtr[0]        = 0;
                     drawWeaponMacro->Name.BufSize             = 0x40;
                     drawWeaponMacro->Name.IsUsingInlineBuffer = 1;
-                    for (var i = 0; i < 14; i++)
+
+                    foreach (var line in drawWeaponMacro->LinesSpan.PointerEnumerator())
                     {
-                        drawWeaponMacro->Line[i]->BufUsed             = 1;
-                        drawWeaponMacro->Line[i]->IsEmpty             = 1;
-                        drawWeaponMacro->Line[i]->StringLength        = 0;
-                        drawWeaponMacro->Line[i]->StringPtr           = drawWeaponMacro->Line[i]->InlineBuffer;
-                        drawWeaponMacro->Line[i]->StringPtr[0]        = 0;
-                        drawWeaponMacro->Line[i]->BufSize             = 0x40;
-                        drawWeaponMacro->Line[i]->IsUsingInlineBuffer = 1;
+                        line->BufUsed             = 1;
+                        line->IsEmpty             = 1;
+                        line->StringLength        = 0;
+                        line->StringPtr           = line->InlineBuffer;
+                        line->StringPtr[0]        = 0;
+                        line->BufSize             = 0x40;
+                        line->IsUsingInlineBuffer = 1;
                     }
 
                     fixed (byte* cStr = *isWeaponDrawn ? SheatheBytes : DrawBytes)
                     {
-                        drawWeaponMacro->Line[0]->SetString(cStr);
-                        RaptureShellModule.Instance->ExecuteMacro(drawWeaponMacro);
+                        drawWeaponMacro->LinesSpan[0].SetString(cStr);
+                        raptureShellModule->ExecuteMacro(drawWeaponMacro);
                     }
 
 
@@ -866,10 +866,10 @@ public class GentleTouch : IDalamudPlugin
                 }
             } else
             {
-                var macro = RaptureMacroModule.Instance->Individual[97];
-                if (macro != null && !instance->MacroLocked)
+                var macro = RaptureMacroModule.Instance()->GetMacro(0, 97);
+                if (macro != null && !raptureShellModule->MacroLocked)
                 {
-                    RaptureShellModule.Instance->ExecuteMacro(macro);
+                    raptureShellModule->ExecuteMacro(macro);
                 }
             }
         }
@@ -936,7 +936,7 @@ public class GentleTouch : IDalamudPlugin
         {
             // TODO (Chiv) Still not quite sure about correct dispose
             // NOTE (Chiv) Explicit, non GC? call - remove managed thingies too.
-            OnLogout(null!, null!);
+            OnLogout();
             _clientState.Login  -= OnLogin;
             _clientState.Logout -= OnLogout;
             _commands.RemoveHandler(Command);

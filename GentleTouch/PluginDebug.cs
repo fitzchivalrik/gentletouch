@@ -1,4 +1,17 @@
-﻿#if DEBUG
+﻿using System;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.IoC;
+using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using GentleTouch.Triggers;
+using ImGuiNET;
+using Lumina.Excel.GeneratedSheets;
+
+#if DEBUG
 namespace GentleTouch
 {
     public partial class GentleTouch
@@ -6,15 +19,15 @@ namespace GentleTouch
         
         [PluginService]
         [RequiredVersion("1.0")]
-        private static GameGui _gameGui { get; set; }
+        private static IGameGui _gameGui { get; set; }
         private void DrawDebugUi()
         {
             //ImGui.PushStyleColor(ImGuiCol.WindowBg, 0xFF000000);
             ImGui.SetNextWindowBgAlpha(1);
             if(!ImGui.Begin($"{PluginName} Debug")) { ImGui.End(); return;}
-            
-            
-            ImGui.Text($"{_maybeControllerStruct.ToString("X12")}:{nameof(_maybeControllerStruct)}");
+
+
+            ImGui.Text($"{_controllerStruct.ToString("X12")}:{nameof(_controllerStruct)}");
             ImGui.Text($"{nameof(ControllerPollDetour)} return Array (hex): ");
             foreach (var i in _lastReturnedFromPoll)
             {
@@ -23,7 +36,7 @@ namespace GentleTouch
             }
 
             ImGui.Text(
-                $"{Marshal.ReadInt32(_maybeControllerStruct, 0x88):X}:int (hex) at {nameof(_maybeControllerStruct)}+0x88");
+                $"{Marshal.ReadInt32(_controllerStruct, 0x88):X}:int (hex) at {nameof(_controllerStruct)}+0x88");
 
             ImGui.Separator();
             ImGui.PushItemWidth(100);
@@ -33,17 +46,17 @@ namespace GentleTouch
             ImGui.InputInt("Cooldown Group", ref _cooldownGroup);
             ImGui.SameLine();
             ImGui.InputInt("Controller Index", ref _dwControllerIndex);
-            if (ImGui.Button("FFXIV SetState")) ControllerSetState((ushort) _leftMotorSpeed, (ushort) _rightMotorSpeed);
+            if (ImGui.Button("FFXIV SetState")) DefaultControllerSetState((ushort)_leftMotorSpeed, (ushort)_rightMotorSpeed);
 
             ImGui.SameLine();
             if (ImGui.Button("XInput Wrapper SetSate"))
-                ControllerSetState((ushort) _leftMotorSpeed, (ushort) _rightMotorSpeed, true);
+                DefaultControllerSetState((ushort)_leftMotorSpeed, (ushort)_rightMotorSpeed);
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1, 0, 0, 1));
             ImGui.SameLine();
             if (ImGui.Button("Stop Vibration"))
             {
-                ControllerSetState(0, 0, true);
-                ControllerSetState(0, 0);
+                DefaultControllerSetState(0, 0);
+                DefaultControllerSetState(0, 0);
             }
 
             ImGui.PopStyleColor();
@@ -54,7 +67,8 @@ namespace GentleTouch
             //ImGui.Separator();
             var didAny = false;
 
-            for (var i = 0; i < Condition.MaxConditionEntries; i++) {
+            for (var i = 0; i < _condition.MaxEntries; i++)
+            {
                 var typedCondition = (ConditionFlag) i;
                 var cond = _condition[typedCondition];
 
