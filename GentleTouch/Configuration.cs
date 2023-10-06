@@ -26,6 +26,7 @@ public class Configuration : IPluginConfiguration
     public byte                      TriggerL2StartPosition      = 0x00;
     public byte                      TriggerR2ForceOrEndPosition = 0x00;
     public byte                      TriggerR2StartPosition      = 0x00;
+    public bool                      DualSenseTriggerCrossHotBarActivation;
     public bool                      TurnLightBarOn;
     public bool                      PsButtonDrawWeapon;
 

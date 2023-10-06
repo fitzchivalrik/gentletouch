@@ -2,11 +2,10 @@
 
 ## Unreleased
 
-- feat: Use DualSense adaptive triggers to mimic double tapping
-
 ## 1.11.0
 
 - chore: Update to API 9
+- feat (wip!): Use DualSense adaptive triggers to mimic double tapping (EXPERIMENTAL)
 
 ## 1.10.4
 

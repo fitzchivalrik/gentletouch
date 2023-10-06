@@ -26,7 +26,7 @@ internal static partial class Config
         var changed            = false;
         var scale              = ImGui.GetIO().FontGlobalScale;
         ImGuiHelpers.ForceNextWindowMainViewport();
-        ImGui.SetNextWindowSize(new Vector2(575 * scale, 400 * scale), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(575 * scale, 425 * scale), ImGuiCond.FirstUseEver);
         ImGui.SetNextWindowSizeConstraints(new Vector2(350 * scale, 200 * scale),
             new Vector2(float.MaxValue, float.MaxValue));
         if (!ImGui.Begin($"{GentleTouch.PluginName} Configuration", ref shouldDrawConfigUi,

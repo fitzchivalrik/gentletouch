@@ -1,4 +1,7 @@
-﻿using GentleTouch.Interop.DualSense;
+﻿using Dalamud.Interface;
+using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
+using GentleTouch.Interop.DualSense;
 using ImGuiNET;
 
 namespace GentleTouch.UI;
@@ -89,6 +92,29 @@ internal partial class Config
             config.TriggerL2ForceOrEndPosition = (byte)forceOrEndPosL2;
             config.TriggerR2StartPosition      = (byte)startPositionR2;
             config.TriggerR2ForceOrEndPosition = (byte)forceOrEndPosR2;
+
+            changed |= ImGui.Checkbox("Use adaptive triggers for CrossHotBar (HIGHLY EXPERIMENTAL!)###GentleTouchDualSenseAdaptiveTriggerXHotBar",
+                ref config.DualSenseTriggerCrossHotBarActivation);
+            ImGui.SameLine();
+            using (var _ = ImRaii.PushFont(UiBuilder.IconFont))
+            {
+                ImGui.Text(Dalamud.Interface.FontAwesomeIcon.QuestionCircle.ToIconString());
+            }
+
+            if (ImGui.IsItemHovered())
+            {
+                using (var _ = ImRaii.Tooltip())
+                {
+                    ImGui.Text("HIGHLY EXPERIMENTAL!");
+                    ImGui.TextWrapped("Control (extended) CrossHotBar with dual stage adaptive triggers instead of double tapping."
+                                      + " Extended CrossHotBar via double tapping needs to be enabled, obviously."
+                                      + " Customise triggers above; recommend values are:");
+                    ImGui.TextUnformatted("SectionResistance, L2/R2 Start: ~20% , L2/R2 End: ~65%");
+                    ImGui.Text("'Light' pull (first stage): Activate CrossHotBar");
+                    ImGui.Text("'Full' pull (second stage): Activate Extended CrossHotBar (which requires double tap normally).");
+                }
+            }
+
             ImGui.Unindent();
         } else
         {

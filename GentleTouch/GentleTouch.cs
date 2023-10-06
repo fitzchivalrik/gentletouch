@@ -652,35 +652,20 @@ public partial class GentleTouch : IDalamudPlugin
       , SimulatedTriggerState         state
       , Action<SimulatedTriggerState> updateState
       , TriggerState                  triggerState
-      , ushort                        mask
+      , ushort                        buttonMask
     )
     {
-        void MimicDoubleTab()
-        {
-            // PluginLog.Log("??? -> DoubleTapFirstTab");
-            updateState(SimulatedTriggerState.DoubleTapFirstTab);
-            _framework.RunOnTick(() =>
-            {
-                // PluginLog.Log("DoubleTabFirstTab -> DoubleTapNone");
-                updateState(SimulatedTriggerState.DoubleTapNone);
-                _framework.RunOnTick(() =>
-                {
-                    // PluginLog.Log("DoubleTapNone -> DoubleTabHold");
-                    updateState(SimulatedTriggerState.DoubleTabHold);
-                }, TimeSpan.FromMilliseconds(15));
-            }, TimeSpan.FromMilliseconds(15));
-        }
-
         switch (state)
         {
             case SimulatedTriggerState.None when triggerState is TriggerState.None:
-                input->ButtonsRaw = (ushort)(input->ButtonsRaw & ~mask);
+                // input->ButtonsRaw = (ushort)(input->ButtonsRaw & ~mask);
                 break;
             // TODO: This is basically never hit, because we always go from Light -> Full and hit single tap
             //  Would need to cache and check if full, before emitting light, but meh.
+            // TODO: I think I would need to delay for X frames, to proper output a Full without a Light
             case SimulatedTriggerState.None when triggerState is TriggerState.Full:
                 //input->ButtonsRaw = (ushort)(input->ButtonsRaw | mask);
-                PluginLog.Log("None (Full) -> MimickDoubleTab");
+                PluginLog.Info("None (Full) -> MimickDoubleTab");
                 MimicDoubleTab();
                 break;
             case SimulatedTriggerState.None when triggerState is TriggerState.Light:
@@ -694,15 +679,15 @@ public partial class GentleTouch : IDalamudPlugin
             case SimulatedTriggerState.SingleTap when triggerState is TriggerState.Full:
                 updateState(SimulatedTriggerState.DoubleTapNone);
                 // PluginLog.Log("SingleTap (Full) -> DoubleTapNone -> MimickDoubleTab");
-                _framework.RunOnTick(MimicDoubleTab, TimeSpan.FromMilliseconds(25));
+                _framework.RunOnTick(MimicDoubleTab, TimeSpan.FromMilliseconds(42));
                 break;
             case SimulatedTriggerState.DoubleTapFirstTab:
                 // PluginLog.Log("DoubleTabFirstTab");
-                input->ButtonsRaw = (ushort)(input->ButtonsRaw | mask);
+                input->ButtonsRaw = (ushort)(input->ButtonsRaw | buttonMask);
                 break;
             case SimulatedTriggerState.DoubleTapNone:
                 // PluginLog.Log("DoubleTabNone");
-                input->ButtonsRaw = (ushort)(input->ButtonsRaw & ~mask);
+                input->ButtonsRaw = (ushort)(input->ButtonsRaw & ~buttonMask);
                 break;
             case SimulatedTriggerState.DoubleTabHold when triggerState is TriggerState.Full or TriggerState.Light:
                 // PluginLog.Log("DoubleTabHold (Full/Light)");
@@ -713,6 +698,24 @@ public partial class GentleTouch : IDalamudPlugin
                 break;
             default:
                 break;
+        }
+
+        return;
+
+        void MimicDoubleTab()
+        {
+            // PluginLog.Log("??? -> DoubleTapFirstTab");
+            updateState(SimulatedTriggerState.DoubleTapFirstTab);
+            _framework.RunOnTick(() =>
+            {
+                // PluginLog.Log("DoubleTabFirstTab -> DoubleTapNone");
+                updateState(SimulatedTriggerState.DoubleTapNone);
+                _framework.RunOnTick(() =>
+                {
+                    // PluginLog.Log("DoubleTapNone -> DoubleTabHold");
+                    updateState(SimulatedTriggerState.DoubleTabHold);
+                }, TimeSpan.FromMilliseconds(35));
+            }, TimeSpan.FromMilliseconds(35));
         }
     }
 
@@ -735,6 +738,7 @@ public partial class GentleTouch : IDalamudPlugin
     private int DualsenseControllerPollDetour(nint gamepadInput)
     {
         var result = _controllerPoll.Original(gamepadInput);
+        if (!_config.DualSenseTriggerCrossHotBarActivation) return result;
         unsafe
         {
             var input = (GamepadInput*)gamepadInput;
@@ -788,9 +792,11 @@ public partial class GentleTouch : IDalamudPlugin
         var report   = (Interop.DualShock4.InputReport*)rawReport;
         var buttons1 = report->Buttons1;
         var buttons2 = report->Buttons2;
+        // TODO: Does changing the button locals to class fields and queuing PSExtraButtons directly remove the lambda
+        // class instance and reduces memory usage? Increases performance? Or decreases, because of worse cache?
         _framework.RunOnFrameworkThread(() => PsExtraButtons(buttons1, buttons2));
 
-        //The detour is only called if the hook is set.
+        //SAFETY: The detour is only called if the hook is set.
         var result = _parseRawInputReportHook!.Original(unk1, rawReport, reportLength, unk4, parseStructure);
         return result;
     }
@@ -844,22 +850,6 @@ public partial class GentleTouch : IDalamudPlugin
                         raptureShellModule->ExecuteMacro(drawWeaponMacro);
                     }
 
-
-                    // fixed (RaptureMacroModule.Macro* drawWeaponMacro = &_drawWeaponMacro)
-                    // {
-                    //     var bytes = Encoding.UTF8.GetBytes(
-                    //         *isWeaponDrawn
-                    //             ? "/sheathe motion\0"
-                    //             : "/draw motion\0");
-                    //     fixed (byte* cStr = bytes)
-                    //     {
-                    //         // If I understand it correctly, uses InlineBuffer because of small string size.
-                    //         // Ergo, no need to collect garbage.
-                    //         drawWeaponMacro->Line[0]->SetString(cStr);
-                    //     }
-                    //
-                    //     RaptureShellModule.Instance->ExecuteMacro(drawWeaponMacro);
-                    // }
                 } else
                 {
                     _drawWeapon((nuint)isWeaponDrawn, !(*isWeaponDrawn));
