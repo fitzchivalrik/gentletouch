@@ -14,7 +14,7 @@ internal partial class Config
 {
     private static bool DrawTriggerTab(
         Configuration               config
-      , DalamudPluginInterface      pi
+      , IDalamudPluginInterface      pi
       , float                       scale
       , IEnumerable<ClassJob>       jobs
       , IReadOnlyCollection<Action> allActions

@@ -16,7 +16,7 @@ internal static partial class Config
 
     internal static (bool, bool) DrawConfigUi(
         Configuration                            config
-      , DalamudPluginInterface                   pi
+      , IDalamudPluginInterface                   pi
       , IReadOnlyCollection<ClassJob>            jobs
       , IReadOnlyCollection<FFXIVAction>         allActions
       , ref IEnumerator<VibrationPattern.Step?>? patternEnumerator

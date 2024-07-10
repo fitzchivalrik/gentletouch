@@ -18,7 +18,6 @@ namespace GentleTouch
     {
         
         [PluginService]
-        [RequiredVersion("1.0")]
         private static IGameGui _gameGui { get; set; }
         private void DrawDebugUi()
         {

@@ -13,7 +13,7 @@ namespace GentleTouch.Interop;
 
 public static class Extensions
 {
-    public static bool IsStatus(this PlayerCharacter actor, StatusFlags flags)
+    public static bool IsStatus(this IPlayerCharacter actor, StatusFlags flags)
     {
         return (actor.StatusFlags & flags) > 0;
     }
@@ -26,7 +26,7 @@ public static class Extensions
           , 10 => cjc.ARM, 11 => cjc.GSM, 12 => cjc.LTW, 13 => cjc.WVR, 14 => cjc.ALC, 15 => cjc.CUL, 16 => cjc.MIN, 17 => cjc.BTN, 18 => cjc.FSH, 19 => cjc.PLD
           , 20 => cjc.MNK, 21 => cjc.WAR, 22 => cjc.DRG, 23 => cjc.BRD, 24 => cjc.WHM, 25 => cjc.BLM, 26 => cjc.ACN, 27 => cjc.SMN, 28 => cjc.SCH, 29 => cjc.ROG
           , 30 => cjc.NIN, 31 => cjc.MCH, 32 => cjc.DRK, 33 => cjc.AST, 34 => cjc.SAM, 35 => cjc.RDM, 36 => cjc.BLU, 37 => cjc.GNB, 38 => cjc.DNC, 39 => cjc.RPR
-          , 40 => cjc.SGE, _  => false
+          , 40 => cjc.SGE, 41 => cjc.VPR, 42=> cjc.PCT, _  => false
         };
     }
 }

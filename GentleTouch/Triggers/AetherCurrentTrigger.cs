@@ -95,15 +95,16 @@ internal class AetherCurrentTrigger : VibrationTrigger
 
     private static unsafe string GetName(GameObject* gameObject)
     {
+        return gameObject->NameString;
         var length      = 0;
-        var currentByte = gameObject->Name;
+        var currentByte = gameObject->GetName();
         while (*currentByte != 0)
         {
             currentByte++;
             length++;
         }
 
-        return Encoding.UTF8.GetString(gameObject->Name, length);
+        return Encoding.UTF8.GetString(gameObject->GetName(), length);
     }
 
     private IEnumerator<VibrationPattern.Step?> CreateEnumerator()

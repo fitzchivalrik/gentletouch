@@ -40,13 +40,13 @@ public partial class GentleTouch : IDalamudPlugin
     //NOTE (Chiv) RowId of ClassJob sheet
     private static readonly HashSet<uint> JobsWhitelist = new()
     {
-        19, 20, 21, 22, 23, 24, 25, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
+        19, 20, 21, 22, 23, 24, 25, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42
     };
 
     //NOTE (Chiv) RowId of ClassJobCategory sheet
     private static readonly HashSet<uint> JobCategoryWhitelist = new()
     {
-        20, 21, 22, 23, 24, 25, 26, 28, 29, 92, 96, 98, 99, 111, 112, 129, 149, 150, 180, 181
+        20, 21, 22, 23, 24, 25, 26, 28, 29, 92, 96, 98, 99, 111, 112, 129, 149, 150, 180, 181, 196, 197
     };
 
     #region Hooks & Delegates
@@ -68,7 +68,7 @@ public partial class GentleTouch : IDalamudPlugin
     // 40 56 57 41 56 48 81 EC ?? ?? ?? ?? 44 0F 29 84 24 ?? ?? ?? ??
     // [Signature("40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B"
     //   , DetourName = nameof(DualsenseControllerPollDetour))]
-    private readonly Hook<Delegates.ControllerPoll> _controllerPoll = null!;
+    private readonly Hook<Delegates.ControllerPoll> _controllerPoll;
 
     [Signature(WriteFileHidDeviceReportSignature, DetourName = nameof(WriteFileHidDOutputReportDetour))]
     private readonly Hook<Delegates.WriteFileHidDOutputReport> _writeFileHidDOutputReportHook = null!;
@@ -111,7 +111,7 @@ public partial class GentleTouch : IDalamudPlugin
     private readonly nint _parseRawDualShock4InputReportAddress;
     private readonly nint _parseRawDualSenseInputReportAddress;
 
-    private readonly        DalamudPluginInterface              _pluginInterface;
+    private readonly        IDalamudPluginInterface              _pluginInterface;
     private readonly        IClientState                        _clientState;
     private readonly        IObjectTable                        _objects;
     private readonly        IFramework                          _framework;
@@ -162,7 +162,7 @@ public partial class GentleTouch : IDalamudPlugin
 #endif
 
     public GentleTouch(
-        DalamudPluginInterface pi
+        IDalamudPluginInterface pi
       , ISigScanner            sigScanner
       , IClientState           clientState
       , IDataManager           data
@@ -347,7 +347,7 @@ public partial class GentleTouch : IDalamudPlugin
         }
 
         // We are in combat, it will not be Null
-        var localPlayer = (_objects[0] as PlayerCharacter)!;
+        var localPlayer = (_objects[0] as IPlayerCharacter)!;
         var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
                              !localPlayer!.IsStatus(StatusFlags.WeaponOut);
         if (weaponSheathed)
@@ -388,7 +388,7 @@ public partial class GentleTouch : IDalamudPlugin
         }
 
         // We are in combat, it will not be Null
-        var localPlayer = (_objects[0] as PlayerCharacter)!;
+        var localPlayer = (_objects[0] as IPlayerCharacter)!;
         var weaponSheathed = _config.NoVibrationWithSheathedWeapon &&
                              !localPlayer.IsStatus(StatusFlags.WeaponOut);
         if (weaponSheathed)
@@ -454,7 +454,7 @@ public partial class GentleTouch : IDalamudPlugin
     private void EnqueueCooldownTriggers()
     {
         // NOTE: This only happens in combat, so the player must exist
-        var localPlayer  = (_objects[0] as PlayerCharacter)!;
+        var localPlayer  = (_objects[0] as IPlayerCharacter)!;
         var currentJobId = localPlayer.ClassJob.Id;
 
         foreach (var t in _config.CooldownTriggers)
@@ -529,7 +529,7 @@ public partial class GentleTouch : IDalamudPlugin
             return;
         }
 
-        if (_objects[0] is not PlayerCharacter localPlayer)
+        if (_objects[0] is not IPlayerCharacter localPlayer)
         {
             return;
         }
@@ -826,27 +826,27 @@ public partial class GentleTouch : IDalamudPlugin
                 {
                     var drawWeaponMacro = stackalloc RaptureMacroModule.Macro[1];
                     drawWeaponMacro->Name.BufUsed             = 1;
-                    drawWeaponMacro->Name.IsEmpty             = 1;
+                    drawWeaponMacro->Name.IsEmpty             = true;
                     drawWeaponMacro->Name.StringLength        = 0;
-                    drawWeaponMacro->Name.StringPtr           = drawWeaponMacro->Name.InlineBuffer;
+                    drawWeaponMacro->Name.StringPtr           = drawWeaponMacro->Name.StringPtr;
                     drawWeaponMacro->Name.StringPtr[0]        = 0;
                     drawWeaponMacro->Name.BufSize             = 0x40;
-                    drawWeaponMacro->Name.IsUsingInlineBuffer = 1;
+                    drawWeaponMacro->Name.IsUsingInlineBuffer = true;
 
-                    foreach (var line in drawWeaponMacro->LinesSpan.PointerEnumerator())
+                    foreach (var line in drawWeaponMacro->Lines.PointerEnumerator())
                     {
                         line->BufUsed             = 1;
-                        line->IsEmpty             = 1;
+                        line->IsEmpty             = true;
                         line->StringLength        = 0;
-                        line->StringPtr           = line->InlineBuffer;
+                        line->StringPtr           = line->InlineBuffer.GetPointer(0);
                         line->StringPtr[0]        = 0;
                         line->BufSize             = 0x40;
-                        line->IsUsingInlineBuffer = 1;
+                        line->IsUsingInlineBuffer = true;
                     }
 
                     fixed (byte* cStr = *isWeaponDrawn ? SheatheBytes : DrawBytes)
                     {
-                        drawWeaponMacro->LinesSpan[0].SetString(cStr);
+                        drawWeaponMacro->Lines[0].SetString(cStr);
                         raptureShellModule->ExecuteMacro(drawWeaponMacro);
                     }
 
@@ -933,9 +933,10 @@ public partial class GentleTouch : IDalamudPlugin
         }
 
         // NOTE (Chiv) Implicit, GC? call and explicit, non GC? call - remove unmanaged thingies.
-        _controllerPoll.Dispose();
-        _writeFileHidDOutputReportHook.Dispose();
-        _deviceChangeHook.Dispose();
+        // Throws NPE if constructor/injection fails, so we safe-call here anyway.
+        _controllerPoll?.Dispose();
+        _writeFileHidDOutputReportHook?.Dispose();
+        _deviceChangeHook?.Dispose();
         _parseRawInputReportHook?.Dispose();
 #if DEBUG
         _drawWeaponHook.Dispose();
