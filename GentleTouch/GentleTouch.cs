@@ -35,7 +35,8 @@ public partial class GentleTouch : IDalamudPlugin
     private const string     Command    = "/gentle";
     public static IPluginLog PluginLog { get; private set; } = null!;
 
-    private const string WriteFileHidDeviceReportSignature = "E8 ?? ?? ?? ?? 83 7B 18 00 74 55";
+    // Search for `HidD_GetPreparsedData`, look for the function, which needs `Capabilities.OutputReportXY`
+    private const string WriteFileHidDeviceReportSignature = "E8 ?? ?? ?? ?? 8B 4B 1C 8B F8"; // 7.0
 
     //NOTE (Chiv) RowId of ClassJob sheet
     private static readonly HashSet<uint> JobsWhitelist = new()
@@ -54,9 +55,9 @@ public partial class GentleTouch : IDalamudPlugin
     [Signature(WriteFileHidDeviceReportSignature)]
     private readonly Delegates.WriteFileHidDOutputReport _writeFileHidDOutputReport = null!;
 
-    // Alternative
-    //    "40 ?? 53 56 48 8B ?? 48 81 EC"; //40 56 57 41 56 48 81 EC ? ? ? ? 44 0F 29 84 24 ? ? ? ?
-    [Signature("40 55 53 56 48 8b ec 48 81 ec 80 00 00 00 33 f6 44 8b d2 4c 8b c9")]
+
+    // Search for 'SetState' and go up the chain
+    [Signature("40 55 53 56 48 8B EC 48 83 EC 70 33 F6")]
     private readonly Delegates.FFXIVSetState _ffxivSetState = null!;
 
 // #if DEBUG
@@ -199,6 +200,7 @@ public partial class GentleTouch : IDalamudPlugin
 
         gameInteropProvider.InitializeFromAttributes(this);
 
+        // TODO: Find all of them for 7.0
         var controllerPollAddress
             = sigScanner.ScanText("40 ?? 57 41 ?? 48 81 EC ?? ?? ?? ?? 44 0F ?? ?? ?? ?? ?? ?? ?? 48 8B");
         _parseRawDualSenseInputReportAddress  = sigScanner.ScanText("E8 ?? ?? ?? ?? 8B 4B 08 48 8D 55 A0");
